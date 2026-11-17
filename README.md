@@ -1,0 +1,531 @@
+# Buzzvel FE
+
+A responsive landing page for **Luma**, a fictional online-learning platform, built as my submission
+for the **Buzzvel Front-End Engineer coding challenge (November 2026)**. It is one complete page for
+mobile, tablet and desktop, implemented from the supplied Figma design with **Next.js (App Router),
+TypeScript and Tailwind CSS**, with typed reusable components, accessible semantics,
+reduced-motion-safe animation and local mock data.
+
+Around the page I also built a production-style delivery setup: Docker, GitHub Actions, Terraform
+and Google Cloud Run, with five environments. The challenge only asks for the page, so the
+infrastructure is deliberately kept small and documented.
+
+> **Status:** in development. Sections marked _"to be completed"_ are filled in before submission.
+> The full execution plan (scope, architecture, phases and quality gates) is in
+> [`MASTERPLAN.md`](./MASTERPLAN.md).
+
+- **Production:** [https://buzzvel-fe.moliveda.dev](https://buzzvel-fe.moliveda.dev)
+- **Repository:** `buzzvel-fe_web` (public)
+
+## Table of contents
+
+- [Buzzvel FE](#buzzvel-fe)
+  - [Table of contents](#table-of-contents)
+  - [Tools and technologies](#tools-and-technologies)
+  - [Project structure](#project-structure)
+  - [Getting started](#getting-started)
+    - [Requirements](#requirements)
+    - [Install, run and build](#install-run-and-build)
+  - [Scripts](#scripts)
+  - [Docker operations 🐳](#docker-operations-)
+    - [1. Local development (hot reloading)](#1-local-development-hot-reloading)
+      - [Commands](#commands)
+    - [2. Executing commands inside a container](#2-executing-commands-inside-a-container)
+    - [3. Image targets](#3-image-targets)
+    - [4. Staging and production](#4-staging-and-production)
+  - [Environments and deployment](#environments-and-deployment)
+    - [CI/CD pipeline](#cicd-pipeline)
+    - [Basic-auth gate and secrets](#basic-auth-gate-and-secrets)
+    - [Health checks](#health-checks)
+    - [Releasing](#releasing)
+    - [Rollback](#rollback)
+  - [Terraform](#terraform)
+    - [What Terraform manages](#what-terraform-manages)
+    - [Layout](#layout)
+    - [Prerequisites](#prerequisites)
+    - [Usage](#usage)
+  - [Environment variables](#environment-variables)
+  - [Testing and quality](#testing-and-quality)
+  - [Security and observability](#security-and-observability)
+  - [Key decisions](#key-decisions)
+  - [Known gaps](#known-gaps)
+  - [Time spent](#time-spent)
+  - [How I use AI to build software](#how-i-use-ai-to-build-software)
+    - [Tools used on this project](#tools-used-on-this-project)
+    - [How I verify AI output](#how-i-verify-ai-output)
+  - [Assets and credits](#assets-and-credits)
+  - [License](#license)
+
+## Tools and technologies
+
+| Area          | Tools                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Runtime       | Node.js 26 (Active LTS), npm with exact dependency versions                                                                                                        |
+| Framework     | Next.js 16 (App Router, `src/app`, Cache Components, Turbopack), React 19, TypeScript (`strict`)                                                                   |
+| Styling       | Tailwind CSS v4, shadcn/ui-style component pattern (`class-variance-authority`, `@radix-ui/react-slot`, `clsx` + `tailwind-merge`), design tokens in `globals.css` |
+| Motion, icons | `framer-motion` (reduced-motion aware), `lucide-react`                                                                                                             |
+| Forms         | React Hook Form + `@hookform/resolvers` + Zod, validated again on the server                                                                                       |
+| Fonts, images | `next/font` (self-hosted, subset, `display: swap`), `next/image` (AVIF/WebP, explicit `sizes`)                                                                     |
+| Logging       | `winston` (JSON to stdout, correlation id) in route handlers                                                                                                       |
+| Quality       | ESLint 9, Prettier, Husky, lint-staged, Gitmoji commit-message hook                                                                                                |
+| Tests         | Vitest, React Testing Library, MSW, Playwright, `@axe-core/playwright` (≥ 80 % coverage gate)                                                                      |
+| Containers    | Docker (single multi-stage `Dockerfile`), Docker Compose (local only), unprivileged NGINX (basic-auth `gate` target)                                               |
+| Cloud         | Google Cloud Run, Artifact Registry                                                                                                                                |
+| IaC and CI/CD | Terraform (remote state in GCS), GitHub Actions (Workload Identity Federation, no stored keys)                                                                     |
+| Secrets       | GitHub Secrets (environment-scoped), injected at deploy time. Google Secret Manager is not used                                                                    |
+
+## Project structure
+
+```text
+buzzvel-fe_web/
+├── .github/
+│   ├── workflows/        # ci · deploy-preview · cleanup-preview · deploy-env · release
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── CODEOWNERS
+├── .husky/               # pre-commit · commit-msg · pre-push
+├── docker/nginx/         # nginx.conf.template · entrypoint.sh (basic-auth gate)
+├── infra/terraform/      # bootstrap · modules · envs
+├── public/               # images (AVIF/WebP + fallbacks), favicon, og image
+├── src/
+│   ├── app/              # layout, page, globals.css, robots, sitemap, health, ready, api/v1/contact
+│   ├── components/
+│   │   ├── ui/           # shadcn-style global primitives (button, badge, card, input, ...)
+│   │   ├── layout/       # site-header, mobile-menu, site-footer, skip-link
+│   │   ├── sections/     # hero, categories, featured-course, how-it-works, ...
+│   │   └── motion/       # motion-provider, reveal, count-up
+│   ├── content/          # typed mock data (copy, categories, steps, stats, footer links)
+│   ├── hooks/            # use-body-scroll-lock, use-focus-trap, use-media-query
+│   ├── lib/              # cn, env (Zod-validated), logger, rate-limit, contact-client
+│   ├── schemas/          # contact.schema.ts
+│   └── types/
+├── tests/e2e/            # Playwright specs (smoke, a11y, contact, menu)
+├── scripts/              # compare-design.ts (overlay/diff helper, dev only)
+├── Dockerfile · docker-compose.yaml
+└── .env.example · AGENTS.md · CLAUDE.md · MASTERPLAN.md · README.md · LICENSE
+```
+
+Unit and integration tests live next to the code they cover (`*.test.ts(x)`). The Figma reference
+frames are kept in a git-ignored `design/` folder and are never committed.
+
+## Getting started
+
+### Requirements
+
+- Node.js 26 (the current LTS, pinned in `.nvmrc` and enforced through `engines`)
+- npm (a lockfile is committed)
+- Docker with Compose v2 (optional, for the containerised workflow)
+
+### Install, run and build
+
+```bash
+git clone https://github.com/<owner>/buzzvel-fe_web.git
+cd buzzvel-fe_web
+nvm use                  # picks the version from .nvmrc
+cp .env.example .env     # defaults work for local development
+npm ci
+npm run dev              # http://localhost:3000
+```
+
+Production build, the same way the container runs it:
+
+```bash
+npm run build
+npm start                # http://localhost:3000
+```
+
+## Scripts
+
+| Script                 | What it does                                     |
+| ---------------------- | ------------------------------------------------ |
+| `npm run dev`          | Start the dev server                             |
+| `npm run build`        | Production build                                 |
+| `npm start`            | Serve the production build                       |
+| `npm run lint`         | ESLint                                           |
+| `npm run format`       | Prettier (write)                                 |
+| `npm run format:check` | Prettier (check only, used in CI)                |
+| `npm run typecheck`    | `tsc --noEmit`                                   |
+| `npm test`             | Unit and integration tests (Vitest)              |
+| `npm run test:cov`     | Same, with the 80 % coverage gate                |
+| `npm run test:e2e`     | Playwright end-to-end tests (desktop and mobile) |
+
+Husky hooks:
+
+| Hook         | Runs                                                                               |
+| ------------ | ---------------------------------------------------------------------------------- |
+| `pre-commit` | `lint-staged` (ESLint `--fix`, Prettier `--write` on staged files), `tsc --noEmit` |
+| `commit-msg` | Gitmoji format check                                                               |
+| `pre-push`   | `vitest run --changed` against the upstream branch                                 |
+
+## Docker operations 🐳
+
+### 1. Local development (hot reloading)
+
+This project uses a single `docker-compose.yaml` for **local development only**, which includes
+**bind mounts** for hot reloading and **exposed ports** for easy access. Everything is built from
+one multi-stage `Dockerfile`.
+
+#### Commands
+
+- **Run (foreground):** `docker compose up --build`
+  - _Builds the image if necessary and starts all services at `http://localhost:3000`. Press
+    `Ctrl+C` to stop._
+- **Run (detached):** `docker compose up -d`
+- **Restart a service:** `docker compose restart web`
+- **Stop all:** `docker compose down`
+- **View logs:** `docker compose logs -f web`
+- **Try the NGINX basic-auth gate locally:** `docker compose --profile gate up --build`
+  - _Starts the same gate container used in the `preview`, `develop` and `staging` environments on
+    `http://localhost:8080` (change the host port with `GATE_PORT`). Requires `BASIC_AUTH_USERNAME`
+    and `BASIC_AUTH_PASSWORD` in `.env`; Compose injects them into the NGINX container, which
+    unlocks the site for that username and password. `/health` and `/ready` stay open without
+    credentials._
+
+### 2. Executing commands inside a container
+
+```bash
+docker compose exec web npm run lint
+docker compose exec web npm run test
+docker compose exec web sh        # Alpine-based image: use sh, not bash
+```
+
+### 3. Image targets
+
+One `Dockerfile`, with the stages `base` → `deps` → `dev` → `builder` → `app`, plus `gate`:
+
+| Target    | Purpose                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| `dev`     | Local development with bind mounts and hot reload                               |
+| `builder` | Installs dependencies and runs `next build` (standalone output)                 |
+| `app`     | Minimal non-root runtime (standalone) with a `HEALTHCHECK` on `/health`         |
+| `gate`    | Unprivileged NGINX that adds basic auth and `noindex` headers in front of `app` |
+
+```bash
+docker build --target app  -t buzzvel-fe-app  .
+docker build --target gate -t buzzvel-fe-gate .
+```
+
+### 4. Staging and production
+
+Staging and production run on **Google Cloud Run**, not Docker Compose. See
+[Environments and deployment](#environments-and-deployment).
+
+## Environments and deployment
+
+| Environment  | Trigger                     | URL                                                                | Basic auth                  | Notes                                                                                                                                       |
+| ------------ | --------------------------- | ------------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `local`      | `docker compose up --build` | `http://localhost:3000`                                            | Optional (`--profile gate`) | Bind mounts, hot reload                                                                                                                     |
+| `preview`    | Pull request to `develop`   | `buzzvel-fe-pr-<n>` Cloud Run URL                                  | Yes                         | Created on PR open/sync, **deleted on PR close**. Same-repo PRs only                                                                        |
+| `develop`    | Push to `develop`           | `buzzvel-fe-develop` Cloud Run URL                                 | Yes                         | Latest, unstable                                                                                                                            |
+| `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL                                 | Yes                         | Candidate for the next stable release                                                                                                       |
+| `production` | Tag `vX.Y.Z` (from `main`)  | [https://buzzvel-fe.moliveda.dev](https://buzzvel-fe.moliveda.dev) | **No**                      | Image of the tagged commit is promoted, not rebuilt. Min instances 1 during the evaluation window (Nov 20 to Dec 4), then reviewed for cost |
+
+Branching follows **GitFlow** (`main`, `develop`, `feature/<topic>`, `release/<n>`,
+`hotfix/<topic>`), commits use **Gitmoji** (`:sparkles: Add hero section`, see
+[gitmoji.dev](https://gitmoji.dev)), and versions follow **Semantic Versioning** (first production
+release: `v1.0.0`). Every non-production environment sends `X-Robots-Tag: noindex`.
+
+```text
+PR open/sync  ─► CI ─► Artifact Registry ─► Cloud Run  buzzvel-fe-pr-<n>   (gate + app)
+push develop  ─► CI ─► Artifact Registry ─► Cloud Run  buzzvel-fe-develop  (gate + app)
+push release/*─► CI ─► Artifact Registry ─► Cloud Run  buzzvel-fe-staging  (gate + app)
+tag vX.Y.Z    ─► CI ─► promote image    ─► Cloud Run  buzzvel-fe-prod     (app only)
+```
+
+### CI/CD pipeline
+
+Implemented with GitHub Actions, authenticated to Google Cloud through **Workload Identity
+Federation** (no service-account keys).
+
+1. **`ci.yml`** (every push and PR): `npm ci`, `format:check`, `lint`, `typecheck`, unit and
+   integration tests with the 80 % coverage gate, `next build`, then Playwright e2e against the
+   production build. Coverage and the Playwright report are uploaded as artifacts.
+   `terraform fmt -check` and `terraform validate` run when `infra/` changes.
+2. **Build and push:** `docker build --target app` and `--target gate` pushed to Artifact Registry,
+   tagged with the commit SHA, with layer caching.
+3. **Deploy:**
+   - `deploy-preview.yml`: same-repo PRs only. Deploys `buzzvel-fe-pr-<n>` and comments the URL on
+     the PR.
+   - `cleanup-preview.yml`: deletes the preview service when the PR closes.
+   - `deploy-env.yml`: `develop` and `release/*` deploy to their Cloud Run service.
+   - `release.yml`: on a `v*.*.*` tag, verifies the tag is on `main`, promotes the image, deploys
+     production, runs a smoke check and creates a GitHub Release.
+4. **Post-deploy smoke:** `curl` `/health` and assert the home page returns 200 (using basic-auth
+   credentials from secrets in protected environments).
+
+### Basic-auth gate and secrets
+
+Protected environments run **two containers in one Cloud Run service**: the NGINX gate on `:8080`
+(public ingress, basic auth) proxying to the Next.js app on `:3000`. Production runs the app
+container only.
+
+```text
+client ─► [ nginx gate :8080, basic auth ] ─► [ next app :3000 ]
+```
+
+The URLs of the protected environments are unlocked with a **username and password that are injected
+into NGINX**. They are stored as **GitHub Secrets** (scoped to the GitHub Environments `develop`,
+`staging` and `preview`), not in Google Secret Manager:
+
+```text
+GitHub Environment secrets BASIC_AUTH_USERNAME + BASIC_AUTH_PASSWORD
+  ─► deploy workflow ─► env vars on the NGINX gate container in Cloud Run
+  ─► gate entrypoint.sh hashes the password and writes the htpasswd file at start
+     (mode 0400, never logged; the container refuses to start if either value is missing)
+  ─► nginx auth_basic_user_file
+```
+
+Trade-off: the username and password end up as Cloud Run environment variables, visible to anyone
+with `run.services.get` on the project. This is acceptable because they only protect non-production
+previews that serve mock data, the password is unique to this project (never reuse one), and the
+values are never stored in Terraform state or Git. Production has no gate and no such secrets.
+
+Set the secrets once per protected environment:
+
+```bash
+gh secret set BASIC_AUTH_USERNAME --env <develop|staging|preview>
+gh secret set BASIC_AUTH_PASSWORD --env <develop|staging|preview>   # prompts for the value
+```
+
+### Health checks
+
+- `GET /health`: liveness, no dependencies.
+- `GET /ready`: readiness (trivial here since there are no downstream dependencies; kept for
+  contract consistency).
+
+NGINX exempts both from basic auth so Cloud Run probes work.
+
+### Releasing
+
+```bash
+git checkout -b release/1.0.0 develop            # push it: deploys to staging and is verified there
+git checkout main && git merge --no-ff release/1.0.0
+git tag v1.0.0 && git push origin main v1.0.0    # triggers the production deploy
+```
+
+### Rollback
+
+Redeploy the previous Cloud Run revision (`gcloud run services update-traffic`) or tag a patch
+release.
+
+## Terraform
+
+Persistent infrastructure is described as code in [`infra/terraform`](./infra/terraform). Ephemeral
+**preview** services are created and removed by the pull-request workflows, not by Terraform.
+
+### What Terraform manages
+
+- Artifact Registry Docker repository
+- Service accounts (deployer and runtime) and Workload Identity Federation for this GitHub
+  repository
+- Cloud Run services for `develop`, `staging` and `production` (production without the gate
+  container)
+- The custom domain for production (`buzzvel-fe.moliveda.dev`): Cloud Run domain mapping where
+  available in the chosen region, otherwise a global external HTTPS load balancer with a serverless
+  NEG and a managed certificate
+
+CI deploys new image revisions. Terraform ignores `image` and environment-variable changes
+(`lifecycle.ignore_changes`) to prevent drift and so that **secret values never reach Terraform
+state**.
+
+### Layout
+
+```text
+infra/terraform/
+├── bootstrap/     # one-time: GCS state bucket, required APIs
+├── modules/       # artifact-registry, cloud-run-service, secrets, iam-wif, domain
+└── envs/          # develop.tfvars, staging.tfvars, production.tfvars
+```
+
+### Prerequisites
+
+- Terraform and the `gcloud` CLI, authenticated (`gcloud auth application-default login`)
+- A GCP project with billing enabled, and the roles needed to create the resources above
+- APIs enabled by the bootstrap step: Cloud Run, Artifact Registry, IAM Credentials (Secret Manager
+  and Cloud Build are not required)
+- Ownership of the DNS zone for `moliveda.dev`
+- GitHub Environments `develop`, `staging` and `preview`, each with the `BASIC_AUTH_USERNAME` and
+  `BASIC_AUTH_PASSWORD` secrets, and repository variables for the `GCP_*` values
+
+### Usage
+
+```bash
+# 1. One-time bootstrap (creates the remote state bucket and enables APIs)
+cd infra/terraform/bootstrap
+terraform init
+terraform apply -var="project_id=<GCP_PROJECT_ID>" -var="region=<GCP_REGION>"
+
+# 2. Per environment (state is isolated per environment)
+cd ../
+terraform init \
+  -backend-config="bucket=<STATE_BUCKET>" \
+  -backend-config="prefix=buzzvel-fe/<env>"
+terraform plan  -var-file=envs/<env>.tfvars
+terraform apply -var-file=envs/<env>.tfvars
+```
+
+CI runs `terraform fmt -check` and `terraform validate` whenever `infra/` changes. Review every
+`plan` before applying; `terraform destroy` on `production` is intentionally not wired into any
+workflow.
+
+_Exact variable names and outputs: to be completed once the infrastructure is applied._
+
+## Environment variables
+
+Copy `.env.example` to `.env` (git-ignored; `.env.example` lists names only). Never commit `.env`.
+All variables are read through `src/lib/env.ts`, which validates them with Zod: the app fails fast
+at start-up if a required value is missing.
+
+| Variable                       | Required | Used by        | Description                                                              |
+| ------------------------------ | -------- | -------------- | ------------------------------------------------------------------------ |
+| `APP_ENV`                      | Yes      | app, CI        | `local`, `preview`, `develop`, `staging` or `production`                 |
+| `NEXT_PUBLIC_SITE_URL`         | Yes      | app            | Canonical origin, e.g. `https://buzzvel-fe.moliveda.dev`                 |
+| `PORT`                         | No       | app, Cloud Run | `3000` for the app (default), `8080` for the gate                        |
+| `LOG_LEVEL`                    | No       | app            | `info` by default                                                        |
+| `CONTACT_RATE_LIMIT_MAX`       | No       | app            | Contact requests allowed per window per IP (default `5`)                 |
+| `CONTACT_RATE_LIMIT_WINDOW_MS` | No       | app            | Rate-limit window in milliseconds (default `600000`)                     |
+| `BASIC_AUTH_HTPASSWD_FILE`     | Gate     | gate           | Path where the entrypoint writes the htpasswd file                       |
+| `BASIC_AUTH_USERNAME`          | Gate     | GitHub Secrets | **Secret.** Gate username injected into NGINX, per protected environment |
+| `BASIC_AUTH_PASSWORD`          | Gate     | GitHub Secrets | **Secret.** Gate password injected into NGINX, per protected environment |
+
+CI and Terraform values are **GitHub Actions repository variables** (not secrets):
+
+| Variable                         | Used by       | Description                            |
+| -------------------------------- | ------------- | -------------------------------------- |
+| `GCP_PROJECT_ID`                 | CI, Terraform | Google Cloud project                   |
+| `GCP_REGION`                     | CI, Terraform | Cloud Run and Artifact Registry region |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | CI            | WIF provider resource name             |
+| `GCP_SERVICE_ACCOUNT`            | CI            | Deployer service account email         |
+| `ARTIFACT_REGISTRY_REPO`         | CI            | Docker repository name                 |
+
+## Testing and quality
+
+| Level       | Tool                      | What it covers                                                                                                                                                                            |
+| ----------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | Vitest + RTL              | UI primitives (variants, `asChild`, ref forwarding, focus/disabled), `cn`, env parsing, rate limiter, Zod schema, content integrity, `Reveal`/`CountUp` under reduced motion, mobile menu |
+| Integration | Vitest (+ MSW for client) | `POST /api/v1/contact` with real `Request` objects (201, 400, 429, honeypot), `ContactForm` with the client fetch layer, page render with all sections and landmarks                      |
+| E2E         | Playwright (+ axe)        | Smoke on desktop and mobile projects, keyboard-only menu flow, contact submit success and failure, axe scan with zero violations, reduced-motion emulation                                |
+| Coverage    | Vitest `v8`               | Thresholds of 80 % for lines, functions, branches and statements. Every exclusion is justified in `vitest.config.mts`                                                                     |
+
+Tests assert behaviour the user sees (roles, labels, text), not implementation details.
+
+**Performance targets** (Lighthouse, mobile, production build): Performance ≥ 95, Accessibility 100,
+Best Practices 100, SEO 100; LCP < 2.5 s, CLS < 0.05, TBT < 200 ms; route JavaScript aiming for ≤
+130 kB gzip.
+
+**Pixel-perfect workflow:** `scripts/compare-design.ts` takes Playwright screenshots at the design
+widths and produces an overlay and diff image against the (git-ignored) design frames. Any accepted
+differences are recorded in the pull-request description.
+
+_Results (coverage percentage, Lighthouse scores and screenshot): to be completed before
+submission._
+
+## Security and observability
+
+- **Headers:** CSP and security headers via `next.config.ts` (`X-Content-Type-Options`,
+  `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`).
+- **Input:** validated on client and server; no HTML rendered from user input; honeypot field on the
+  contact form.
+- **Rate limiting:** per-IP, in-memory limit on the contact route (per instance); NGINX `limit_req`
+  on gated environments.
+- **Containers:** run as non-root.
+- **Secrets:** only in GitHub Secrets (environment-scoped, masked in logs); never in Git, Terraform
+  state or images. `npm audit` and Dependabot are enabled.
+- **Logging:** `winston` JSON logs to stdout with `service`, `env` and `correlationId`
+  (`X-Correlation-ID` accepted or generated, and echoed on the response). Message bodies and emails
+  are never logged, only lengths and ids. Cloud Run metrics and Cloud Logging act as the metrics and
+  search layer.
+
+## Key decisions
+
+- **Server Components by default.** Only the mobile menu, contact form and animated pieces
+  (count-up, motion wrappers) are Client Components, which keeps the JavaScript small.
+- **shadcn-style component library.** Shared elements (`Button`, `Badge`, `Card`, `Input`, `Field`,
+  ...) are copy-owned primitives in `src/components/ui`, built with `class-variance-authority`
+  variants, `asChild` through `@radix-ui/react-slot`, and `className` merged with `cn`. Sections
+  compose these primitives instead of restyling raw elements.
+- **Reduced motion is handled in one place.** All animation goes through
+  `MotionConfig reducedMotion="user"` and small wrappers (`Reveal`, `CountUp`). With reduced motion,
+  content is shown immediately and final stat values are always in the DOM.
+- **Typed content.** All copy lives in typed constants under `src/content`, so components stay free
+  of magic strings.
+- **Design tokens once.** Colours, type and spacing are extracted from Figma into `globals.css`
+  (Tailwind v4 `@theme inline`, shadcn semantic naming). Design pixels are converted to `rem`.
+- **Contact form via a versioned REST endpoint.** `POST /api/v1/contact` validates with the same Zod
+  schema as the client, rate-limits and acknowledges. It is a mock and sends no email.
+- **Layouts the design did not show.** The designs have no tablet layout, mobile menu or interaction
+  states. I designed them in the same visual language: a keyboard-accessible mobile menu with focus
+  trap, two-column tablet grids, and hover and focus states for every interactive element.
+- **Design inconsistencies resolved.** The desktop design shows "STEP 01" on all three steps; I used
+  01, 02 and 03. The mobile contact form was in Portuguese; the page is English on every breakpoint.
+  The lorem-ipsum paragraph in the people section is kept as in the design.
+- **NGINX gate as a sidecar.** Non-production environments run NGINX (basic auth) in front of the
+  app inside the same Cloud Run service, built from the same `Dockerfile`. Production has no gate.
+- **GitHub Secrets instead of Google Secret Manager.** Simpler for a single project; the trade-off
+  is described in [Basic-auth gate and secrets](#basic-auth-gate-and-secrets).
+- **Artifact Registry.** Used instead of the retired Container Registry.
+- **`winston` for logging.** Structured JSON on stdout, which Cloud Logging ingests natively. A
+  Prometheus/OpenTelemetry stack is out of scope for a single page.
+
+## Known gaps
+
+_To be completed before submission. Current candidates:_
+
+- A strict Content-Security-Policy is attempted, but a residual `'unsafe-inline'` may remain for
+  Next.js inline scripts.
+- Rate limiting on the contact endpoint is per instance (in memory); a shared store would be needed
+  at scale.
+- The contact form is a mock: no email is sent and nothing is stored.
+- Preview environments are limited to pull requests from the same repository (forks do not receive
+  secrets).
+- Lighthouse scores are measured on the production build; automation against the live URL is
+  optional.
+- `npm audit` reports a high-severity ReDoS advisory in `picomatch`, pulled in only by dev tooling
+  (ESLint, Vitest, lint-staged) and with no patched release yet. The production dependency tree
+  (`npm audit --omit=dev`) has no known vulnerabilities.
+
+## Time spent
+
+_To be completed before submission (approximate hours: setup and infrastructure / page build / tests
+and polish)._
+
+## How I use AI to build software
+
+To develop a fresh project, I follow these simple but complete steps:
+
+Before I start, I already have a 3,000-word AI instruction Markdown that tells the AI model how to
+act, what tools to choose, its style, etc.
+
+1. First, I go to Claude's website and paste that AI instruction.
+2. Then, I ask any questions or clarifications the model needs.
+3. When the model is ready, it will generate two important files: `README.md` and `MASTERPLAN.md`.
+   The latter would be like a to-do plan to how to execute the project and how to help me build it;
+   it is like the README file but more extensive, like a house plan.
+4. After I have the files, I create a local folder on my computer to start working with those files,
+   generating the `CLAUDE.md` and `AGENTS.md` AI instruction files to keep quality and use best
+   practices.
+
+### Tools used on this project
+
+- **Claude** (claude.ai and Claude Code) for planning, the plan documents, code generation and
+  review.
+
+### How I verify AI output
+
+- I read and understand every change before committing it, and I can explain any part of the code.
+- Nothing is trusted until the automated gates pass: ESLint, Prettier, `tsc --noEmit`, unit and
+  integration tests with the coverage gate, Playwright e2e and axe, all enforced by Husky locally
+  and by CI on every push.
+- Versions, commands and cloud configuration are checked against official documentation instead of
+  relying on the model's memory.
+- Visual accuracy is checked by me against the design with an overlay diff, and the page is tested
+  by hand on mobile and desktop with keyboard-only navigation.
+- Generated infrastructure is reviewed through `terraform plan` before every apply.
+
+## Assets and credits
+
+_To be completed: image sources, licences and font licence._ The challenge brief and the design
+files belong to Buzzvel and are not included in this repository.
+
+## License
+
+See [`LICENSE`](./LICENSE).
