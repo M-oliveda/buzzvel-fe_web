@@ -7,10 +7,6 @@ export type SiteContent = {
     name: string;
     title: string;
     description: string;
-    placeholder: {
-        heading: string;
-        body: string;
-    };
     /** Browser UI colour; the cream page surface (`--muted` in globals.css). */
     themeColor: string;
     logo: {
@@ -49,10 +45,6 @@ export const site: SiteContent = {
     title: "Luma — Build skills that actually move you forward",
     description:
         "Expert-led online courses in product design, technology, business and creative skills.",
-    placeholder: {
-        heading: "Build skills that actually move you forward.",
-        body: "The Luma landing page is under construction.",
-    },
     themeColor: "#f9f8f3",
     logo: {
         src: "/icons/logo.svg",
