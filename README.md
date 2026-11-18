@@ -170,6 +170,9 @@ one multi-stage `Dockerfile`.
   - _Builds the image if necessary and starts all services at `http://localhost:3000`. Press
     `Ctrl+C` to stop._
 - **Run (detached):** `docker compose up -d`
+- **After changing dependencies:** `docker compose up --build -V`
+  - _`-V` recreates the anonymous `node_modules` volume; without it the container keeps the old
+    packages.
 - **Restart a service:** `docker compose restart web`
 - **Stop all:** `docker compose down`
 - **View logs:** `docker compose logs -f web`
@@ -178,7 +181,7 @@ one multi-stage `Dockerfile`.
     `http://localhost:8080` (change the host port with `GATE_PORT`). Requires `BASIC_AUTH_USERNAME`
     and `BASIC_AUTH_PASSWORD` in `.env`; Compose injects them into the NGINX container, which
     unlocks the site for that username and password. `/health` and `/ready` stay open without
-    credentials._
+    credentials. Use `GATE_PORT=8089` if port 8080 is already taken._
 
 ### 2. Executing commands inside a container
 
@@ -187,6 +190,12 @@ docker compose exec web npm run lint
 docker compose exec web npm run test
 docker compose exec web sh        # Alpine-based image: use sh, not bash
 ```
+
+_The dev image leaves out `tests/`, `.github/`, `.husky/` and Markdown (`.dockerignore`), so
+container checks cover `src/` and the config files only. Run `npm run test:e2e` and the full-tree
+`format:check`, `lint` and `typecheck` on the host. Check the production build with
+`docker build --target app`, not `npm run build` in the dev container (it runs with
+`NODE_ENV=development`)._
 
 ### 3. Image targets
 
@@ -219,6 +228,16 @@ Staging and production run on **Google Cloud Run**, not Docker Compose. See
 | `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL                                 | Yes                         | Candidate for the next stable release                                                                                                       |
 | `production` | Tag `vX.Y.Z` (from `main`)  | [https://buzzvel-fe.moliveda.dev](https://buzzvel-fe.moliveda.dev) | **No**                      | Image of the tagged commit is promoted, not rebuilt. Min instances 1 during the evaluation window (Nov 20 to Dec 4), then reviewed for cost |
 
+Each cloud environment lives in **its own Google Cloud project**, all in `us-central1`, and maps to
+the GitHub Environment of the same name:
+
+| GitHub Environment | GCP project                    | Deployer service account (WIF)                                            |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------- |
+| `preview`          | `moliveda-gcloudprojects-prev` | `cicd-deployer-prev@moliveda-gcloudprojects-prev.iam.gserviceaccount.com` |
+| `develop`          | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@moliveda-gcloudprojects-dev.iam.gserviceaccount.com`   |
+| `staging`          | `moliveda-gcloudprojects-stg`  | `cicd-deployer-stg@moliveda-gcloudprojects-stg.iam.gserviceaccount.com`   |
+| `production`       | `moliveda-gcloudprojects-prod` | `cicd-deployer-prod@moliveda-gcloudprojects-prod.iam.gserviceaccount.com` |
+
 Branching follows **GitFlow** (`main`, `develop`, `feature/<topic>`, `release/<n>`,
 `hotfix/<topic>`), commits use **Gitmoji** (`:sparkles: Add hero section`, see
 [gitmoji.dev](https://gitmoji.dev)), and versions follow **Semantic Versioning** (first production
@@ -234,7 +253,11 @@ tag vX.Y.Z    ─► CI ─► promote image    ─► Cloud Run  buzzvel-fe-pro
 ### CI/CD pipeline
 
 Implemented with GitHub Actions, authenticated to Google Cloud through **Workload Identity
-Federation** (no service-account keys).
+Federation** (no service-account keys). Each project already has a shared pool (`github-pool`), a
+provider (`github-provider`, which only accepts tokens from repositories owned by `M-oliveda`) and a
+deployer service account. This repository is allowed to impersonate each deployer through
+`roles/iam.workloadIdentityUser`, scoped to `M-oliveda/buzzvel-fe_web`. Deploy jobs declare
+`environment: <name>` so they pick up that environment's project, provider and deployer.
 
 1. **`ci.yml`** (every push and PR): `npm ci`, `format:check`, `lint`, `typecheck`, unit and
    integration tests with the 80 % coverage gate, `next build`, then Playwright e2e against the
@@ -284,7 +307,10 @@ Set the secrets once per protected environment:
 ```bash
 gh secret set BASIC_AUTH_USERNAME --env <develop|staging|preview>
 gh secret set BASIC_AUTH_PASSWORD --env <develop|staging|preview>   # prompts for the value
+gh secret list --env <develop|staging|preview>                     # names only, never values
 ```
+
+Use a different password in each environment. `production` has no gate secrets.
 
 ### Health checks
 
@@ -314,14 +340,17 @@ Persistent infrastructure is described as code in [`infra/terraform`](./infra/te
 
 ### What Terraform manages
 
-- Artifact Registry Docker repository
-- Service accounts (deployer and runtime) and Workload Identity Federation for this GitHub
-  repository
+- Artifact Registry Docker repository (`buzzvel-fe`)
+- The runtime service account
 - Cloud Run services for `develop`, `staging` and `production` (production without the gate
   container)
 - The custom domain for production (`buzzvel-fe.moliveda.dev`): Cloud Run domain mapping where
   available in the chosen region, otherwise a global external HTTPS load balancer with a serverless
   NEG and a managed certificate
+
+The Workload Identity pool, provider and deployer service accounts are shared by the owner's other
+repositories, so Terraform does not manage them. This repository's binding to them is set up once by
+hand (see [Prerequisites](#prerequisites)).
 
 CI deploys new image revisions. Terraform ignores `image` and environment-variable changes
 (`lifecycle.ignore_changes`) to prevent drift and so that **secret values never reach Terraform
@@ -332,19 +361,30 @@ state**.
 ```text
 infra/terraform/
 ├── bootstrap/     # one-time: GCS state bucket, required APIs
-├── modules/       # artifact-registry, cloud-run-service, secrets, iam-wif, domain
+├── modules/       # artifact-registry, cloud-run-service, runtime-sa, domain
 └── envs/          # develop.tfvars, staging.tfvars, production.tfvars
 ```
 
 ### Prerequisites
 
 - Terraform and the `gcloud` CLI, authenticated (`gcloud auth application-default login`)
-- A GCP project with billing enabled, and the roles needed to create the resources above
-- APIs enabled by the bootstrap step: Cloud Run, Artifact Registry, IAM Credentials (Secret Manager
-  and Cloud Build are not required)
+- The four GCP projects listed in [Environments and deployment](#environments-and-deployment), with
+  billing enabled, and the roles needed to create the resources above
+- APIs enabled in each project: Cloud Run, Artifact Registry, IAM Credentials (Secret Manager and
+  Cloud Build are not required)
 - Ownership of the DNS zone for `moliveda.dev`
-- GitHub Environments `develop`, `staging` and `preview`, each with the `BASIC_AUTH_USERNAME` and
-  `BASIC_AUTH_PASSWORD` secrets, and repository variables for the `GCP_*` values
+- GitHub Environments `preview`, `develop`, `staging` and `production` with the variables listed in
+  [Environment variables](#environment-variables), and the `BASIC_AUTH_USERNAME` and
+  `BASIC_AUTH_PASSWORD` secrets in the three gated ones
+- This repository bound to each project's deployer (one-time, already done):
+
+  ```bash
+  gcloud iam service-accounts add-iam-policy-binding \
+    cicd-deployer-<suffix>@moliveda-gcloudprojects-<suffix>.iam.gserviceaccount.com \
+    --project moliveda-gcloudprojects-<suffix> \
+    --role roles/iam.workloadIdentityUser \
+    --member "principalSet://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/github-pool/attribute.repository/M-oliveda/buzzvel-fe_web"
+  ```
 
 ### Usage
 
@@ -387,15 +427,16 @@ at start-up if a required value is missing.
 | `BASIC_AUTH_USERNAME`          | Gate     | GitHub Secrets | **Secret.** Gate username injected into NGINX, per protected environment |
 | `BASIC_AUTH_PASSWORD`          | Gate     | GitHub Secrets | **Secret.** Gate password injected into NGINX, per protected environment |
 
-CI and Terraform values are **GitHub Actions repository variables** (not secrets):
+CI and Terraform values are **GitHub Actions variables** (not secrets). Values that differ per
+project are set on each GitHub Environment, so a job sees them only when it declares `environment:`:
 
-| Variable                         | Used by       | Description                            |
-| -------------------------------- | ------------- | -------------------------------------- |
-| `GCP_PROJECT_ID`                 | CI, Terraform | Google Cloud project                   |
-| `GCP_REGION`                     | CI, Terraform | Cloud Run and Artifact Registry region |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | CI            | WIF provider resource name             |
-| `GCP_SERVICE_ACCOUNT`            | CI            | Deployer service account email         |
-| `ARTIFACT_REGISTRY_REPO`         | CI            | Docker repository name                 |
+| Variable                         | Scope       | Used by       | Value                                                                                                    |
+| -------------------------------- | ----------- | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `GCP_REGION`                     | Repository  | CI, Terraform | `us-central1`                                                                                            |
+| `ARTIFACT_REGISTRY_REPO`         | Repository  | CI            | `buzzvel-fe`                                                                                             |
+| `GCP_PROJECT_ID`                 | Environment | CI, Terraform | That environment's project, e.g. `moliveda-gcloudprojects-stg`                                           |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Environment | CI            | `projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
+| `GCP_SERVICE_ACCOUNT`            | Environment | CI            | That project's deployer, e.g. `cicd-deployer-stg@moliveda-gcloudprojects-stg.iam.gserviceaccount.com`    |
 
 ## Testing and quality
 
@@ -449,7 +490,12 @@ submission._
 - **Typed content.** All copy lives in typed constants under `src/content`, so components stay free
   of magic strings.
 - **Design tokens once.** Colours, type and spacing are extracted from Figma into `globals.css`
-  (Tailwind v4 `@theme inline`, shadcn semantic naming). Design pixels are converted to `rem`.
+  (Tailwind v4 `@theme inline`, shadcn semantic naming). Design pixels are converted to `rem`. Type
+  sizes are fluid `clamp()` tokens between the mobile frame (402 px) and the desktop frame (1280
+  px), for example `text-h1` goes from 40/44 to 64/70. Fonts are Plus Jakarta Sans (headings,
+  600/700/800) and Inter (body and UI, 400/600/700). The Figma file has no error colour, so
+  `destructive` (`#c4262e`) is my addition. `text-subtle-foreground` (`#6d7384`) is 4.45:1 on the
+  cream surface, just under WCAG AA for body text; it is kept as designed and flagged for review.
 - **Contact form via a versioned REST endpoint.** `POST /api/v1/contact` validates with the same Zod
   schema as the client, rate-limits and acknowledges. It is a mock and sends no email.
 - **Layouts the design did not show.** The designs have no tablet layout, mobile menu or interaction
@@ -460,8 +506,12 @@ submission._
   The lorem-ipsum paragraph in the people section is kept as in the design.
 - **NGINX gate as a sidecar.** Non-production environments run NGINX (basic auth) in front of the
   app inside the same Cloud Run service, built from the same `Dockerfile`. Production has no gate.
-- **GitHub Secrets instead of Google Secret Manager.** Simpler for a single project; the trade-off
-  is described in [Basic-auth gate and secrets](#basic-auth-gate-and-secrets).
+- **One GCP project per environment.** `preview`, `develop`, `staging` and `production` deploy to
+  separate existing projects. This isolates IAM, quotas and billing, and the pipelines reuse the
+  Workload Identity setup already shared across my repositories instead of creating new ones.
+- **GitHub Secrets instead of Google Secret Manager.** Simpler than running Secret Manager in each
+  project; the trade-off is described in
+  [Basic-auth gate and secrets](#basic-auth-gate-and-secrets).
 - **Artifact Registry.** Used instead of the retired Container Registry.
 - **`winston` for logging.** Structured JSON on stdout, which Cloud Logging ingests natively. A
   Prometheus/OpenTelemetry stack is out of scope for a single page.
@@ -477,6 +527,8 @@ _To be completed before submission. Current candidates:_
 - The contact form is a mock: no email is sent and nothing is stored.
 - Preview environments are limited to pull requests from the same repository (forks do not receive
   secrets).
+- Staging and production are separate projects. Promoting the staging image to production needs the
+  production deployer to have read access to the staging registry; this is not set up yet.
 - Lighthouse scores are measured on the production build; automation against the live URL is
   optional.
 - `npm audit` reports a high-severity ReDoS advisory in `picomatch`, pulled in only by dev tooling
