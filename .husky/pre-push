@@ -4,7 +4,10 @@ echo "🧪 Running pre-push checks..."
 
 # Run only the tests affected by commits not yet on the upstream branch.
 # Without an upstream (first push of a branch), run the whole suite.
-upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null)
+# `|| true` is required: Husky runs hooks with `sh -e`, and `rev-parse` exits 128
+# when the branch has no upstream. Without it the script aborts before the
+# fallback below can run the full suite.
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || true)
 
 if [ -n "$upstream" ]; then
   echo "🔎 Running tests related to changes since $upstream..."

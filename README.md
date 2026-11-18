@@ -118,7 +118,7 @@ frames are kept in a git-ignored `design/` folder and are never committed.
 ### Install, run and build
 
 ```bash
-git clone https://github.com/<owner>/buzzvel-fe_web.git
+git clone https://github.com/M-oliveda/buzzvel-fe_web.git
 cd buzzvel-fe_web
 nvm use                  # picks the version from .nvmrc
 cp .env.example .env     # defaults work for local development
@@ -241,7 +241,9 @@ the GitHub Environment of the same name:
 Branching follows **GitFlow** (`main`, `develop`, `feature/<topic>`, `release/<n>`,
 `hotfix/<topic>`), commits use **Gitmoji** (`:sparkles: Add hero section`, see
 [gitmoji.dev](https://gitmoji.dev)), and versions follow **Semantic Versioning** (first production
-release: `v1.0.0`). Every non-production environment sends `X-Robots-Tag: noindex`.
+release: `v1.0.0`). `main` and `develop` are protected: changes land only through a pull request
+with a green `CI passed` check, and force pushes and deletions are blocked. Every non-production
+environment sends `X-Robots-Tag: noindex`.
 
 ```text
 PR open/sync  ─► CI ─► Artifact Registry ─► Cloud Run  buzzvel-fe-pr-<n>   (gate + app)
@@ -324,9 +326,14 @@ NGINX exempts both from basic auth so Cloud Run probes work.
 
 ```bash
 git checkout -b release/1.0.0 develop            # push it: deploys to staging and is verified there
-git checkout main && git merge --no-ff release/1.0.0
-git tag v1.0.0 && git push origin main v1.0.0    # triggers the production deploy
+git push -u origin release/1.0.0
+gh pr create --base main --head release/1.0.0    # merge (merge commit) once CI passes
+git checkout main && git pull
+git tag v1.0.0 && git push origin v1.0.0         # triggers the production deploy
 ```
+
+`main` is protected, so the release reaches it through a pull request, not a direct push. Merge
+`main` back into `develop` afterwards (also through a pull request).
 
 ### Rollback
 
