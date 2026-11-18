@@ -26,6 +26,8 @@ next-env.d.ts
 *.tfstate.*
 *.tfvars
 *.tfvars.json
+*.tfplan
+!/infra/terraform/envs/*.tfvars
 crash.log
 override.tf
 override.tf.json
