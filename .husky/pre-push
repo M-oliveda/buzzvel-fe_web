@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+
+echo "🧪 Running pre-push checks..."
+
+# Run only the tests affected by commits not yet on the upstream branch.
+# Without an upstream (first push of a branch), run the whole suite.
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null)
+
+if [ -n "$upstream" ]; then
+  echo "🔎 Running tests related to changes since $upstream..."
+  npx --no-install vitest run --changed "$upstream" --passWithNoTests
+else
+  echo "🔎 No upstream branch yet, running the full unit test suite..."
+  npm run --silent test
+fi
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo "❌ Tests failed. Please fix the failing tests before pushing."
+  exit 1
+fi
+
+echo "✅ All pre-push checks passed!"

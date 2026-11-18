@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+
+echo "🔍 Running pre-commit checks..."
+
+# 1. Block files that must never reach the repository (see AGENTS.md §8 "Security").
+#    `design/` and `.env*` are git-ignored, but `git add -f` can still bypass that.
+blocked=$(git diff --cached --name-only --diff-filter=ACMR |
+  grep -E '^design/|(^|/)\.env(\.|$)|\.(pem|key)$' |
+  grep -v '\.env\.example$' || true)
+
+if [ -n "$blocked" ]; then
+  echo "❌ Refusing to commit confidential or secret files:"
+  echo "$blocked" | sed 's/^/   - /'
+  echo "💡 Unstage them with 'git restore --staged <file>'."
+  exit 1
+fi
+
+# 2. Lint and format only the staged files (ESLint --fix, Prettier --write)
+echo "📋 Linting and formatting staged files with lint-staged..."
+if ! npx --no-install lint-staged; then
+  echo "❌ Linting or formatting failed. Please fix the errors before committing."
+  echo "💡 Run 'npm run lint' and 'npm run format' to see every issue."
+  exit 1
+fi
+
+# 3. Type checking runs on the whole project (types cross file boundaries)
+echo "🔍 Checking code types with TypeScript..."
+if ! npm run --silent typecheck; then
+  echo "❌ Type checking failed. Please fix the type errors before committing."
+  exit 1
+fi
+
+echo "✅ All pre-commit checks passed!"
