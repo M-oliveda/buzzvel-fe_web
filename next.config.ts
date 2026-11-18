@@ -8,7 +8,7 @@ const securityHeaders = [
     { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
     {
         key: "Permissions-Policy",
-        value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+        value: "camera=(), microphone=(), geolocation=()",
     },
 ];
 
