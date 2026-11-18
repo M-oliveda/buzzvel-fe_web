@@ -504,22 +504,42 @@ stack is out of scope for a single static page.
 
 ### Phase 3 — Design system and page build
 
-- [ ] Ingest I3/I4: fonts, tokens, optimised images (AVIF/WebP, responsive widths).
+- [x] Ingest I3/I4: fonts, tokens, optimised images (AVIF/WebP, responsive widths).
   - Done: fonts (Inter, Plus Jakarta Sans) and tokens from the Figma desktop and mobile frames.
-  - Open: optimised images (I4).
-- [ ] `globals.css` tokens (shadcn semantic naming); shadcn-style `ui` primitives per §10.3.1
+  - Done (2026-11-18): every photo, avatar, logo and icon exported from the desktop frame into
+    `public/images/` and `public/icons/`; `next/image` serves AVIF/WebP at responsive widths
+    (`images.formats`, `images.qualities: [75]`), the hero image is the only `preload`.
+- [x] `globals.css` tokens (shadcn semantic naming); shadcn-style `ui` primitives per §10.3.1
       (`Button` with `cva` variants first, then `Badge`, `Card`, `Label`, `Input`, `Textarea`,
       `Field`, `Eyebrow`, `Container`, `SectionHeading`) with unit tests.
   - Done: `globals.css` tokens (colours, fluid type scale, radii, shadows, layout).
-  - Open: the `ui` primitives and their tests.
-- [ ] `RootLayout` with `next/font`, metadata, skip link, `MotionProvider`.
-  - Done: `next/font` and metadata. Open: skip link, `MotionProvider`.
-- [ ] Content files (`src/content/*`) from the design copy.
-- [ ] Build sections in order: Header/Footer shell → Hero → Categories → Featured course → How it
+  - Done (2026-11-18): all ten `ui` primitives plus `AvatarStack`, with unit tests (variants,
+    `asChild`, ref, focus, disabled). `cn` registers the custom tokens with tailwind-merge so
+    `text-overline` and friends are not dropped next to a colour class. Tokens added:
+    `text-caption`, `gold`.
+- [x] `RootLayout` with `next/font`, metadata, skip link, `MotionProvider`.
+  - Done (2026-11-18): skip link, `MotionProvider` (`reducedMotion="user"`), `metadataBase`,
+    canonical, Open Graph, Twitter card and theme colour.
+- [x] Content files (`src/content/*`) from the design copy.
+  - Done (2026-11-18): `site`, `footer-links`, `categories`, `steps`, `stats`, `home`, with a
+    content-integrity test (anchors, numbering, image files, alt text, English form copy).
+- [x] Layout shell: `SiteHeader`, `MobileMenu` (open/close only, Phase 4 hardens it), `SiteFooter`.
+  - Done (2026-11-18): built from the desktop frame, with tests.
+- [x] Build sections in order: Header/Footer shell → Hero → Categories → Featured course → How it
       works → Testimonial/Stats → People → Contact (static) → CTA band.
-- [ ] Responsive pass at 320 / 390 / 768 / 1024 / 1440 / 1920.
+  - Done (2026-11-18): all eight sections from the desktop frame, each with a render test; one
+    page-level test checks landmarks, the single `h1` and section order.
+- [x] Responsive pass at 320 / 390 / 768 / 1024 / 1440 / 1920.
+  - Done (2026-11-18): screenshots at all six widths, no horizontal scroll (also an e2e check),
+    tablet layouts designed and documented in the README, axe clean at 390 and 1440.
+  - Done (2026-11-18): compared section by section with the mobile frame (`design/fe-mobile.png`,
+    exported by the owner) and fixed the deltas: photo above the hero copy, stacked full-width
+    featured-course buttons, stats in a row, vertical step connectors, no CTA shapes, plus mobile
+    spacing in every section. Page height 7882 px against 7799 px in the frame (about 1 %).
 - **Exit criteria:** all ten sections present at every breakpoint with correct content; no console
   errors; tests for each section's rendering.
+  - Met (2026-11-18): no console errors at any of the six widths after dropping `browsing-topics`
+    from `Permissions-Policy` (owner decision).
 
 ### Phase 4 — Interactions, accessibility and motion
 

@@ -8,7 +8,7 @@ const securityHeaders = [
     { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
     {
         key: "Permissions-Policy",
-        value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+        value: "camera=(), microphone=(), geolocation=()",
     },
 ];
 
@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
     output: "standalone",
     poweredByHeader: false,
     cacheComponents: true,
+    images: {
+        // AVIF first, WebP fallback (MASTERPLAN §10.7). `qualities` is required since Next.js 16.
+        formats: ["image/avif", "image/webp"],
+        qualities: [75],
+    },
     partialPrefetching: true,
     turbopack: {
         rules: {
