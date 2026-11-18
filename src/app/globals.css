@@ -31,6 +31,7 @@
     --sand: #fff1c2; /* Figma: backgrounnd-yellow (CTA band) */
     --peach: #ffcb9f; /* Figma: background-orange (decorative shapes, hero accent) */
     --coral: #ff704d; /* Figma: primary-orange (decorative only, fails contrast with text) */
+    --gold: #e9d659; /* Figma: unnamed fill of the step 3 tile (decorative only) */
     --navy: #171b2c; /* Figma: background-darkblue (footer) */
     --on-dark: #ffffff; /* Figma: text-white-primary */
     --on-dark-muted: #e7e7ec; /* Figma: text-white-secondary */
@@ -80,6 +81,7 @@
     --color-sand: var(--sand);
     --color-peach: var(--peach);
     --color-coral: var(--coral);
+    --color-gold: var(--gold);
     --color-navy: var(--navy);
     --color-on-dark: var(--on-dark);
     --color-on-dark-muted: var(--on-dark-muted);
@@ -144,6 +146,9 @@
     --text-body: 0.875rem; /* Inter 400, 14/24 on both frames */
     --text-body--line-height: 1.5rem;
 
+    --text-caption: 0.8125rem; /* Inter 400, 13/19.5 (footer copyright) */
+    --text-caption--line-height: 1.21875rem;
+
     --text-overline: 0.75rem; /* Inter 600, 12/16, +0.12em, uppercase */
     --text-overline--line-height: 1rem;
     --text-overline--letter-spacing: 0.12em;
@@ -154,6 +159,14 @@
     html {
         font-family: var(--font-sans);
         font-size: 100%;
+        /* Anchor targets land below the sticky header (MASTERPLAN §10.5). */
+        scroll-padding-top: var(--header-height);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        html {
+            scroll-behavior: smooth;
+        }
     }
 
     body {
