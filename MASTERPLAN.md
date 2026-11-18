@@ -93,7 +93,7 @@ RootLayout (fonts, metadata, MotionProvider, skip link)
    PR open/sync ──► CI ──► Artifact Registry ──► Cloud Run  buzzvel-fe-pr-<n>   (gate + app)  preview
    push develop ──► CI ──► Artifact Registry ──► Cloud Run  buzzvel-fe-develop  (gate + app)
    push release/* ► CI ──► Artifact Registry ──► Cloud Run  buzzvel-fe-staging  (gate + app)
-   tag vX.Y.Z   ──► CI ──► promote image    ──► Cloud Run  buzzvel-fe-prod     (app only)
+   tag vX.Y.Z   ──► CI ──► rebuild tag      ──► Cloud Run  buzzvel-fe-prod     (app only)
                                                      │
                               buzzvel-fe.moliveda.dev ┘  (production only)
 
@@ -146,8 +146,8 @@ buzzvel-fe_web/
 ├── infra/
 │   └── terraform/
 │       ├── bootstrap/        state bucket (run once, documented; WIF and deployers pre-exist)
-│       ├── modules/          artifact-registry · cloud-run-service · runtime-sa · domain
-│       └── envs/             develop.tfvars · staging.tfvars · production.tfvars
+│       ├── modules/          artifact-registry · cloud-run-service · runtime-sa · domain (Phase 6)
+│       └── envs/             preview.tfvars · develop.tfvars · staging.tfvars · production.tfvars
 ├── public/                   images (AVIF/WebP + fallbacks) · favicon · og image
 ├── src/
 │   ├── instrumentation.ts · instrumentation.node.ts   (boot-time env validation, fail fast)
@@ -208,13 +208,13 @@ any confidential material never enter Git.
 
 ## 9. Environments and delivery pipeline
 
-| Environment  | Trigger                     | URL                                | NGINX basic auth            | Notes                                                                                                                  |
-| ------------ | --------------------------- | ---------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `local`      | `docker compose up --build` | `http://localhost:3000`            | Optional (`--profile gate`) | Bind mounts, hot reload                                                                                                |
-| `preview`    | Pull request to `develop`   | `buzzvel-fe-pr-<n>` Cloud Run URL  | Yes                         | Created on PR open/sync, **deleted on PR close**. Same-repo PRs only                                                   |
-| `develop`    | Push to `develop`           | `buzzvel-fe-develop` Cloud Run URL | Yes                         | Latest, unstable                                                                                                       |
-| `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL | Yes                         | Candidate for the next stable release                                                                                  |
-| `production` | Tag `vX.Y.Z` (from `main`)  | `https://buzzvel-fe.moliveda.dev`  | **No**                      | Image promoted from the tagged commit. Min instances 1 during the evaluation window (Nov 20 → Dec 4), then review cost |
+| Environment  | Trigger                     | URL                                | NGINX basic auth            | Notes                                                                                                                 |
+| ------------ | --------------------------- | ---------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `local`      | `docker compose up --build` | `http://localhost:3000`            | Optional (`--profile gate`) | Bind mounts, hot reload                                                                                               |
+| `preview`    | Pull request to `develop`   | `buzzvel-fe-pr-<n>` Cloud Run URL  | Yes                         | Created on PR open/sync, **deleted on PR close**. Same-repo PRs only                                                  |
+| `develop`    | Push to `develop`           | `buzzvel-fe-develop` Cloud Run URL | Yes                         | Latest, unstable                                                                                                      |
+| `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL | Yes                         | Candidate for the next stable release                                                                                 |
+| `production` | Tag `vX.Y.Z` (from `main`)  | `https://buzzvel-fe.moliveda.dev`  | **No**                      | Image rebuilt from the tagged commit. Min instances 1 during the evaluation window (Nov 20 → Dec 4), then review cost |
 
 Each deploy job runs in the GitHub Environment of the same name, which supplies that environment's
 GCP project, WIF provider and deployer (§6.2, Appendix A) and, when it is gated, its basic-auth
@@ -225,7 +225,7 @@ secrets.
 1. **`ci.yml`** (every push and PR): install (`npm ci`), `format:check`, `lint`, `typecheck`, unit
    and integration tests with the 80 % coverage gate, `next build`, then Playwright e2e against the
    production build. Upload coverage and Playwright report as artifacts. `terraform fmt -check` and
-   `terraform validate` run when `infra/` changes.
+   `terraform validate` run on every CI run.
 2. **Build and push:** `docker build --target app` and `--target gate` → Artifact Registry, tagged
    with the commit SHA. Layer caching via `cache-from/cache-to`.
 3. **Deploy:**
@@ -233,8 +233,9 @@ secrets.
      PR.
    - `cleanup-preview.yml`: on PR close, deletes the service.
    - `deploy-env.yml`: `develop` and `release/*` deploy to their Cloud Run service.
-   - `release.yml`: on `v*.*.*` tag, verifies the tag is on `main`, promotes the image, deploys
-     production, runs a smoke check (`/health`, `/`), creates a GitHub Release.
+   - `release.yml`: on `v*.*.*` tag, verifies the tag is on `main` and that `CI passed` is green for
+     it, rebuilds the tagged commit in the production project, deploys production, runs a smoke
+     check (`/health`, `/`), creates a GitHub Release.
 4. **Post-deploy smoke:** `curl` `/health` and assert the home page returns 200 (with basic-auth
    credentials from secrets in protected environments).
 
@@ -271,14 +272,19 @@ radii, shadows, container width. Until I3 arrives, no styling work starts beyond
 
 ### 10.3 Ambiguity decisions (approved by owner)
 
-| Topic                                               | Decision                                                                                                                                  |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| "STEP 01" shown on all three steps                  | Render **01, 02, 03**. Mention in the README.                                                                                             |
-| Mobile contact form is Portuguese                   | Use **English** on every breakpoint (`Full name`, `Email`, `Your question`, `Send message`).                                              |
-| Lorem ipsum in the people section                   | Keep the placeholder text as in the design.                                                                                               |
-| No mobile menu, tablet layout or interaction states | Design them in the same visual language; document in the README.                                                                          |
-| Contact form behaviour                              | Zod + React Hook Form validation, accessible errors, submit to mock `POST /api/v1/contact`, success and failure states. No email is sent. |
-| GCP layout (I1, decided 2026-11-18)                 | One existing project per environment (§6.2), region `us-central1`. Reuse the shared WIF pool and deployers instead of creating them.      |
+| Topic                                               | Decision                                                                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| "STEP 01" shown on all three steps                  | Render **01, 02, 03**. Mention in the README.                                                                                               |
+| Mobile contact form is Portuguese                   | Use **English** on every breakpoint (`Full name`, `Email`, `Your question`, `Send message`).                                                |
+| Lorem ipsum in the people section                   | Keep the placeholder text as in the design.                                                                                                 |
+| No mobile menu, tablet layout or interaction states | Design them in the same visual language; document in the README.                                                                            |
+| Contact form behaviour                              | Zod + React Hook Form validation, accessible errors, submit to mock `POST /api/v1/contact`, success and failure states. No email is sent.   |
+| GCP layout (I1, decided 2026-11-18)                 | One existing project per environment (§6.2), region `us-central1`. Reuse the shared WIF pool and deployers instead of creating them.        |
+| Production image (decided 2026-11-18)               | **Rebuild the tagged commit** in the production project. `NEXT_PUBLIC_SITE_URL` is baked in at build, and no cross-project registry access. |
+| Preview infrastructure (decided 2026-11-18)         | `envs/preview.tfvars` manages the registry and runtime SA in the prev project; PR workflows create and delete the services.                 |
+| Terraform checks in CI (decided 2026-11-18)         | `fmt -check` and `validate` run on every CI run (not path-filtered) and are part of `CI passed`.                                            |
+| Production min instances (decided 2026-11-18)       | `0` until the evaluation window; raised to `1` in Phase 6.                                                                                  |
+| Production proof (decided 2026-11-18)               | A real throwaway tag `v0.0.1`, created only with the owner's confirmation.                                                                  |
 
 ### 10.3.1 UI component library (shadcn-style)
 
@@ -446,7 +452,12 @@ stack is out of scope for a single static page.
 - [ ] Bootstrap (documented, run once): GCS bucket for Terraform state, enable APIs (Run, Artifact
       Registry, IAM Credentials; Secret Manager and Cloud Build not required).
   - Done: the three APIs are already enabled in all four projects (§6.2).
-  - Open: Terraform state bucket.
+  - Done (2026-11-18): `infra/terraform/bootstrap/` (state bucket `<project>-tfstate` with
+    versioning, uniform access, public access prevention and `prevent_destroy`; the three APIs with
+    `disable_on_destroy = false`), documented in its `README.md`. `fmt` and `validate` pass. Plan
+    reviewed: 4 to add in dev, stg and prod; 3 in prev, which reuses the existing
+    `moliveda-gcloudprojects-prev-tfstate` bucket (`create_state_bucket = false`).
+  - Open: owner-approved `terraform apply` in the four projects.
 - [ ] GitHub setup: create GitHub Environments (`preview`, `develop`, `staging`, `production`) and
       store `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` as environment secrets in the gated
       ones; `GCP_*` values as variables.
@@ -454,27 +465,40 @@ stack is out of scope for a single static page.
     `ARTIFACT_REGISTRY_REPO` are set, and so are the environment variables `GCP_PROJECT_ID`,
     `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` (Appendix A). This repository is
     bound to each project's `cicd-deployer-*` service account through WIF.
-  - Open: the owner sets the basic-auth secrets in `preview`, `develop` and `staging`; deployment
-    branch/tag rules per environment (e.g. `production` limited to `v*` tags).
+  - Open: the owner sets the basic-auth secrets in `preview`, `develop` and `staging` (none are set
+    yet, checked 2026-11-18); deployment branch/tag rules per environment (`develop` → `develop`,
+    `staging` → `release/*`, `production` → `v*` tags; `preview` unrestricted).
 - [ ] Terraform modules: Artifact Registry repo, runtime service account, Cloud Run services for
       `develop`, `staging`, `production` (production without the gate container), one state per
       project. The WIF pool, provider and deployer service accounts already exist (§6.2) and are not
       managed here. Terraform ignores `image` and env var changes (`lifecycle.ignore_changes`) so
       secret values never reach state.
-  - Open: the `buzzvel-fe` Artifact Registry repository does not exist yet in any project.
+  - Done (2026-11-18): root config and modules `artifact-registry` (cleanup policies), `runtime-sa`
+    (no project roles) and `cloud-run-service` (placeholder image, public invoker, `ignore_changes`
+    on containers); `envs/{preview,develop,staging,production}.tfvars` (`preview` creates no
+    service, see §10.3). Provider `hashicorp/google` 8.10.0 locked for Linux and macOS. `fmt` and
+    `validate` pass. The deployers already hold `run.admin`, `artifactregistry.writer` and
+    `iam.serviceAccountUser`, so no IAM grants are needed.
+  - Open: per-environment `plan` (after bootstrap), owner review, `apply`. The `buzzvel-fe` Artifact
+    Registry repository does not exist yet in any project.
 - [ ] NGINX gate: `nginx.conf.template` (basic auth, `/health` and `/ready` exempt, `X-Robots-Tag`,
       `limit_req`, proxy to `127.0.0.1:3000`); `entrypoint.sh` reads `BASIC_AUTH_USERNAME` and
       `BASIC_AUTH_PASSWORD` at container start, fails fast if either is missing, hashes the password
       and writes the htpasswd file (mode 0400, values never logged). The deploy workflow injects the
       two GitHub secrets into the gate container on Cloud Run.
+  - Done (Phase 1): basic auth, exempt probes, `X-Robots-Tag`, proxy, and the `entrypoint.sh`
+    behaviour above.
+  - Open: `limit_req` keyed on the real client IP, `scripts/test-gate.sh` smoke test, injection by
+    the deploy workflow.
 - [ ] Workflows: build and push, `deploy-preview`, `cleanup-preview`, `deploy-env`, `release`.
       Same-repo guard on preview.
-  - Open (owner decision): because staging and production are separate projects, `release` cannot
-    promote the staging image without granting the production deployer read access to the staging
-    registry; the alternative is rebuilding the tagged commit in production.
+  - Decided (2026-11-18): `release` rebuilds the tagged commit in production instead of promoting
+    the staging image (§10.3).
+  - Open: all five workflows (`build-push-deploy.yml` is the reusable "build and push").
 - [ ] Verify: PR → preview URL commented; merge to `develop` → develop service updates;
       unauthenticated request to a gated env returns 401; `/health` returns 200 without auth.
 - [ ] Terraform `fmt`/`validate` in CI.
+  - Open: CI job (runs on every CI run, §10.3). Passes locally today.
 - **Exit criteria:** every non-production environment reachable behind basic auth; production path
   proven with a throwaway tag (`v0.0.1`) or dry run.
 
