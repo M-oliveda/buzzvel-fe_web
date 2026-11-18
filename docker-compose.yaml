@@ -1,0 +1,50 @@
+name: buzzvel-fe_local
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: buzzvel-fe_web
+    init: true
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./next.config.ts:/app/next.config.ts:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./.prettierrc.json:/app/.prettierrc.json:ro
+      - ./eslint.config.mjs:/app/eslint.config.mjs:ro
+      - ./vitest.config.mts:/app/vitest.config.mts:ro
+      - ./vitest.setup.ts:/app/vitest.setup.ts:ro
+      - /app/node_modules
+      - /app/.next
+
+  # NGINX basic-auth gate: the same image that fronts the app on preview, develop and staging.
+  # Opt-in so a plain `docker compose up` stays password-free:
+  #   docker compose --profile gate up --build   →   http://localhost:8080
+  gate:
+    profiles: ["gate"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gate
+    depends_on:
+      - web
+    ports:
+      - "${GATE_PORT:-8080}:8080"
+    environment:
+      # Service name on the Compose network. In Cloud Run the default (127.0.0.1:3000) is used.
+      UPSTREAM: web:3000
+      # No `:?` guard here: Compose interpolates every service, even inactive profiles, so it
+      # would break `docker compose up`. The gate entrypoint refuses to start on empty values.
+      BASIC_AUTH_USERNAME: ${BASIC_AUTH_USERNAME:-}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
