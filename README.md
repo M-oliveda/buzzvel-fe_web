@@ -506,8 +506,25 @@ submission._
 - **Contact form via a versioned REST endpoint.** `POST /api/v1/contact` validates with the same Zod
   schema as the client, rate-limits and acknowledges. It is a mock and sends no email.
 - **Layouts the design did not show.** The designs have no tablet layout, mobile menu or interaction
-  states. I designed them in the same visual language: a keyboard-accessible mobile menu with focus
-  trap, two-column tablet grids, and hover and focus states for every interactive element.
+  states. I designed them in the same visual language: a drop-down mobile menu under the header
+  (full-width nav links, then Log in and Start learning), two-column category cards and a row of
+  stats under the quote on tablet, steps in a row with their connecting line from 768 px, and hover
+  and focus states for every interactive element (category cards lift and nudge their arrow on both
+  hover and keyboard focus). Hero, featured course, people and contact switch to two columns at 1024
+  px. The mobile menu opens, closes on link click and closes when the window grows to desktop; its
+  focus trap, `Esc` handling and scroll lock are added with the other interactions.
+- **Header links.** The design does not say where the navigation goes, so the links scroll to the
+  matching section: Courses and Start learning to the categories, For Teams and Log in to contact,
+  Community to the people section and About to "How Luma works". Footer entries without a page
+  (Careers, Journal, Terms, Privacy) point to the top of the page.
+- **Contrast fixes against the design.** "Browse all courses" uses white instead of `#e7e7ec`, which
+  is 4.46:1 on the blue band. Step labels and the response-time line use the secondary text colour
+  instead of the tertiary one, which is 4.45:1 on the cream surface. Everything else is as designed.
+- **People collage.** The photos are laid out in the design's pixel sizes and scaled with container
+  query units, so the collage keeps its proportions from 320 px to desktop; on mobile it is 10 %
+  shorter, as in the mobile frame.
+- **Permissions-Policy.** `browsing-topics` was removed from the header: current Chromium no longer
+  recognises it and logged a console error on every page load.
 - **Design inconsistencies resolved.** The desktop design shows "STEP 01" on all three steps; I used
   01, 02 and 03. The mobile contact form was in Portuguese; the page is English on every breakpoint.
   The lorem-ipsum paragraph in the people section is kept as in the design.
@@ -538,6 +555,15 @@ _To be completed before submission. Current candidates:_
   production deployer to have read access to the staging registry; this is not set up yet.
 - Lighthouse scores are measured on the production build; automation against the live URL is
   optional.
+- The route ships about 191 kB of gzipped JavaScript, over the 130 kB target. The Phase 1
+  placeholder page, with no client components, already shipped 170 kB: that is the Next.js 16 and
+  React 19 runtime. The page itself adds about 21 kB (mobile menu, `tailwind-merge`, motion
+  provider).
+- Mobile copy and colour differences kept at the desktop version: the mobile frame adds "actually"
+  to the second step ("professionals who actually use these skills"), shows the people paragraph in
+  the primary text colour and a paler step 2 tile. The desktop wording and colours are used on every
+  breakpoint so the page reads the same everywhere.
+- Input placeholders use the design's tertiary text colour (4.45:1 on the cream input background).
 - `npm audit` reports a high-severity ReDoS advisory in `picomatch`, pulled in only by dev tooling
   (ESLint, Vitest, lint-staged) and with no patched release yet. The production dependency tree
   (`npm audit --omit=dev`) has no known vulnerabilities.
@@ -582,8 +608,16 @@ act, what tools to choose, its style, etc.
 
 ## Assets and credits
 
-_To be completed: image sources, licences and font licence._ The challenge brief and the design
-files belong to Buzzvel and are not included in this repository.
+- **Photos and avatars** (`public/images/`): exported from the Figma file supplied by Buzzvel for
+  this challenge and used only for this submission. Their original sources and licences were not
+  given with the design.
+- **Logo, icons and decorative shapes** (`public/icons/`): exported from the same Figma file. UI
+  icons in the mobile menu come from [Lucide](https://lucide.dev) (ISC licence).
+- **Fonts:** [Inter](https://rsms.me/inter/) and
+  [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans), both under the SIL Open Font
+  Licence 1.1, self-hosted through `next/font`.
+
+The challenge brief and the design files belong to Buzzvel and are not included in this repository.
 
 ## License
 

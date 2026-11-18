@@ -180,17 +180,22 @@ are missing or invalid (`src/instrumentation.node.ts`). Read the full list in MA
 MASTERPLAN §7 is the target tree. What exists today versus what is planned:
 
 ```text
-src/app/                  layout, page (placeholder), globals.css (tokens done), icon.svg,
+src/app/                  layout, page (all sections), globals.css, icon.svg,
                           health/, ready/ ................................................ exists
 src/app/api/v1/contact/   mock contact endpoint ........................................ Phase 4
-src/app/{robots,sitemap,not-found,error}.ts(x) ......................................... Phase 3–4
-src/components/ui/        shadcn-style primitives (Button first, then Badge, Card, …) .... Phase 3
-src/components/layout/    site-header, mobile-menu, site-footer, skip-link ............... Phase 3–4
-src/components/sections/  hero, categories, featured-course, how-it-works, … .............. Phase 3
-src/components/motion/    motion-provider, reveal, count-up .............................. Phase 4
-src/content/              site.ts exists; ALL copy and lists go here as typed constants
+src/app/{robots,sitemap,not-found,error}.ts(x) ......................................... Phase 4
+src/components/ui/        button, badge, card, label, input, textarea, field, eyebrow,
+                          container, section-heading, avatar-stack ....................... exists
+src/components/layout/    logo, site-header, mobile-menu (Phase 4 hardens it), site-footer,
+                          skip-link ...................................................... exists
+src/components/sections/  hero, categories, featured-course, how-it-works,
+                          testimonial-stats, people, contact (static), cta-band .......... exists
+src/components/motion/    motion-provider exists; reveal, count-up ....................... Phase 4
+src/content/              site, footer-links, categories, steps, stats, home; ALL copy and
+                          lists go here as typed constants ............................... exists
 src/lib/                  cn.ts, env.ts, health.ts exist; logger, rate-limit, contact-client planned
-src/hooks/ src/schemas/ src/types/ ...................................................... planned
+src/types/                content.ts (shared content types) .............................. exists
+src/hooks/ src/schemas/ ................................................................. planned
 src/instrumentation*.ts   boot-time env validation ....................................... exists
 tests/e2e/                smoke.spec.ts exists; a11y, contact, menu specs planned
 docker/nginx/             gate config template + entrypoint .............................. exists
@@ -295,8 +300,9 @@ Unit and integration tests are **colocated** as `*.test.ts(x)` next to the code 
 ### Performance (Lighthouse mobile: Perf ≥ 95, SEO 100, Best Practices 100)
 
 - LCP < 2.5 s, CLS < 0.05, TBT < 200 ms; route JS ≤ 130 kB gzip.
-- `next/image` with explicit `width`/`height` and `sizes`; only the hero (LCP) image gets
-  `priority`. Images ship as AVIF/WebP at responsive widths.
+- `next/image` with explicit `width`/`height` and `sizes`; only the hero (LCP) image gets `preload`
+  (`priority` is deprecated since Next.js 16). Images ship as AVIF/WebP at responsive widths
+  (`images.formats` and the required `images.qualities` in `next.config.ts`).
 - `next/font` self-hosted with only the used weights and subsets (configured in `layout.tsx`: Inter
   400/600/700, Plus Jakarta Sans 600/700/800). Add a weight only when a design style needs it.
 - Prefer Server Components; no client-side data fetching for static content.
