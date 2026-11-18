@@ -250,7 +250,7 @@ Unit and integration tests are **colocated** as `*.test.ts(x)` next to the code 
   `:construction_worker: Add deploy workflow`, `:whale: Add gate Docker target`,
   `:memo: Update README`, `:lipstick: Polish category card hover`,
   `:recycle: Extract Field primitive`, `:building_construction: Add Terraform modules`. Reference:
-  https://gitmoji.dev.
+  [https://gitmoji.dev](https://gitmoji.dev).
 - **Hooks (never bypass with `--no-verify` or `HUSKY=0`):**
   - `pre-commit`: blocks `design/`, `.env*` (except `.env.example`), `*.pem`, `*.key`; then
     `lint-staged` (ESLint `--fix` + Prettier on staged files) and `npm run typecheck`.
