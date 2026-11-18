@@ -406,14 +406,16 @@ stack is out of scope for a single static page.
 ### Phase 0 — Plan and documentation
 
 - [x] Read the challenge PDF, both design frames and the charter.
-- [ ] Review and approve `MASTERPLAN.md` and `README.md`.
+- [x] Review and approve `MASTERPLAN.md` and `README.md`.
 
-### Phase 1 — Repository, tooling and local Docker _(first phase requested by owner)_
+### Phase 1 — Repository, tooling and local Docker
 
-- [ ] Create the GitHub repo `buzzvel-fe_web` (public); `main` holds `README.md`, `LICENSE`,
+- [x] Create the GitHub repo `buzzvel-fe_web` (public); `main` holds `README.md`, `LICENSE`,
       `.gitignore`. Create `develop`. Protect `main` and `develop` (PR required, CI required).
   - Done: public repo `M-oliveda/buzzvel-fe_web` with `main` and `develop`.
-  - Open: branch protection on `main` and `develop` (both report "Branch not protected").
+  - Done (2026-11-18): both branches protected: PR required (0 approvals, single maintainer),
+    required check `CI passed` (strict, up to date), admins included, conversation resolution
+    required, no force pushes or deletions. No linear-history rule (GitFlow `--no-ff` merges).
 - [x] Scaffold Next.js 16 + TypeScript + Tailwind v4 in `src/` layout; set `.nvmrc`, `engines`,
       exact dependency versions.
 - [x] Add dependencies: `framer-motion`, `lucide-react`, `zod`, `react-hook-form`,
@@ -434,8 +436,8 @@ stack is out of scope for a single static page.
 - [x] `.env.example`, `src/lib/env.ts` with Zod validation.
 - [x] Generate `AGENTS.md` (project context, commands, conventions, security rules) and `CLAUDE.md`
       as a symlink to it.
-- [ ] Write the first CI workflow (`ci.yml`) and make it green on an empty page. _(Workflow written
-      and every step verified locally; green run pending the first push.)_
+- [x] Write the first CI workflow (`ci.yml`) and make it green on an empty page.
+  - Done (2026-11-18): run `44312928034` on `develop` at `a42dd16`, all five jobs green.
 - **Exit criteria:** fresh clone → `docker compose up --build` serves the app; `git commit` runs
   hooks; CI green; `/health` returns 200.
 
