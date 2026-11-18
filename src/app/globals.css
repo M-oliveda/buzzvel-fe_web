@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens extracted from the Figma file (desktop frame 1280 px, mobile frame 402 px).
+ * shadcn/ui semantic names first, design-specific extras below them (MASTERPLAN §10.2).
+ * Raw colour values live ONLY in this file; components use the utilities generated from @theme.
+ */
+:root {
+    /* Semantic palette */
+    --background: #ffffff;
+    --foreground: #171b2c; /* Figma: text-primary */
+    --card: #ffffff;
+    --card-foreground: #171b2c;
+    --primary: #3157f6; /* Figma: primary-blue */
+    --primary-foreground: #ffffff;
+    --secondary: #e2e8ff; /* Figma: primary-blue-light (chips, icon boxes, avatars) */
+    --secondary-foreground: #3157f6;
+    --accent: #ffee7e; /* Figma: secondary-yellow ("View course" button, avatar rings) */
+    --accent-foreground: #171b2c;
+    --muted: #f9f8f3; /* Figma: backgrounnd-light-yellow (cream surface) */
+    --muted-foreground: #656770; /* Figma: text-secondary */
+    --subtle-foreground: #6d7384; /* Figma: text-tertiary */
+    --border: #dbdfeb; /* Figma: line-1 */
+    --input: #dbdfeb;
+    --ring: #3157f6;
+    /* Not in the design: a red that keeps AA contrast (5.7:1) on white for form errors. */
+    --destructive: #c4262e;
+    --destructive-foreground: #ffffff;
+
+    /* Design extras */
+    --sand: #fff1c2; /* Figma: backgrounnd-yellow (CTA band) */
+    --peach: #ffcb9f; /* Figma: background-orange (decorative shapes, hero accent) */
+    --coral: #ff704d; /* Figma: primary-orange (decorative only, fails contrast with text) */
+    --navy: #171b2c; /* Figma: background-darkblue (footer) */
+    --on-dark: #ffffff; /* Figma: text-white-primary */
+    --on-dark-muted: #e7e7ec; /* Figma: text-white-secondary */
+    --on-dark-subtle: #9e9faa; /* Figma: text-white-tertiary */
+
+    /* Radius base: buttons and inputs (8 px). */
+    --radius: 0.5rem;
+
+    /* Layout. Mobile values first, widened at the `lg` breakpoint below. */
+    --gutter: 1.25rem; /* 20 px mobile side padding, 80 px desktop */
+    --section-y: 3.75rem; /* 60 px mobile section padding, 100 px desktop */
+    --header-height: 4.25rem; /* 68 px mobile, 70 px desktop */
+}
+
+@media (min-width: 64rem) {
+    :root {
+        --gutter: 5rem;
+        --section-y: 6.25rem;
+        --header-height: 4.375rem;
+    }
+}
+
+@theme inline {
+    /* Reset Tailwind's default palette so only design colours exist. */
+    --color-*: initial;
+    --color-transparent: transparent;
+    --color-current: currentColor;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-subtle-foreground: var(--subtle-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-sand: var(--sand);
+    --color-peach: var(--peach);
+    --color-coral: var(--coral);
+    --color-navy: var(--navy);
+    --color-on-dark: var(--on-dark);
+    --color-on-dark-muted: var(--on-dark-muted);
+    --color-on-dark-subtle: var(--on-dark-subtle);
+
+    /* Families are loaded in layout.tsx through next/font. */
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+    /* Radii seen in the design: 6 chip, 8 button/input, 12 badge, 16 card, 24 hero image, full. */
+    --radius-sm: 0.375rem;
+    --radius-md: var(--radius);
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
+
+    --shadow-float: 0 4px 12px rgb(0 0 0 / 0.1); /* hero floating badges */
+    --shadow-card: 0 12px 16px rgb(23 27 44 / 0.04); /* contact form card */
+    --shadow-dark-m: 0 0 4px #00000012, 0 4px 6px -1px #0000001a; /* Figma: Shadow/Dark/M */
+
+    --container-content: 70rem; /* 1120 px content width of the desktop frame */
+
+    --spacing-gutter: var(--gutter);
+    --spacing-section: var(--section-y);
+    --spacing-header: var(--header-height);
+
+    /*
+     * Type scale. Each size is fluid between the mobile frame (402 px) and the desktop frame
+     * (1280 px): clamp(mobile, intercept + slope * viewport, desktop). Line-height is fluid too.
+     * Letter-spacing is -0.025em on every heading, which matches both frames exactly.
+     */
+    --text-h1: clamp(2.5rem, 1.8132rem + 2.7335vw, 4rem); /* Jakarta 800, 40/44 to 64/70 */
+    --text-h1--line-height: clamp(2.75rem, 2.006rem + 2.9613vw, 4.375rem);
+    --text-h1--letter-spacing: -0.025em;
+    --text-h1--font-weight: 800;
+
+    --text-h2: clamp(2.25rem, 1.6777rem + 2.2779vw, 3.5rem); /* Jakarta 800, 36/40 to 56/64 */
+    --text-h2--line-height: clamp(2.5rem, 1.8132rem + 2.7335vw, 4rem);
+    --text-h2--letter-spacing: -0.025em;
+    --text-h2--font-weight: 800;
+
+    --text-h3: clamp(2rem, 1.5421rem + 1.8223vw, 3rem); /* Jakarta 800, 32/36 to 48/56 */
+    --text-h3--line-height: clamp(2.25rem, 1.6777rem + 2.2779vw, 3.5rem);
+    --text-h3--letter-spacing: -0.025em;
+    --text-h3--font-weight: 800;
+
+    --text-h5: 1.25rem; /* Jakarta 700, 20/28 to 20/32 */
+    --text-h5--line-height: clamp(1.75rem, 1.6356rem + 0.4556vw, 2rem);
+    --text-h5--font-weight: 700;
+
+    --text-quote: clamp(1.25rem, 0.9638rem + 1.139vw, 1.875rem); /* Jakarta 600, 20/32 to 30/44 */
+    --text-quote--line-height: clamp(2rem, 1.6566rem + 1.3667vw, 2.75rem);
+    --text-quote--letter-spacing: clamp(-0.0469rem, 0.0214rem - 0.0854vw, 0rem); /* 0 to -0.75px */
+    --text-quote--font-weight: 600;
+
+    --text-subtitle-1: clamp(1rem, 0.9427rem + 0.2278vw, 1.125rem); /* Inter 400, 16/26 to 18/28 */
+    --text-subtitle-1--line-height: clamp(1.625rem, 1.5677rem + 0.2278vw, 1.75rem);
+
+    --text-subtitle-2: clamp(0.875rem, 0.8177rem + 0.2278vw, 1rem); /* Inter 400, 14/24 to 16/28 */
+    --text-subtitle-2--line-height: clamp(1.5rem, 1.3856rem + 0.4556vw, 1.75rem);
+
+    --text-body: 0.875rem; /* Inter 400, 14/24 on both frames */
+    --text-body--line-height: 1.5rem;
+
+    --text-overline: 0.75rem; /* Inter 600, 12/16, +0.12em, uppercase */
+    --text-overline--line-height: 1rem;
+    --text-overline--letter-spacing: 0.12em;
+    --text-overline--font-weight: 600;
+}
+
+@layer base {
+    html {
+        font-family: var(--font-sans);
+        font-size: 100%;
+    }
+
+    body {
+        background: var(--background);
+        color: var(--foreground);
+        font-size: var(--text-body);
+        line-height: var(--text-body--line-height);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: var(--font-display);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+}
