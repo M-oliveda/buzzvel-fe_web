@@ -58,7 +58,7 @@ to one of those.
 | Quality        | ESLint 9, Prettier, `lint-staged`, Husky, Gitmoji commit-message hook                                                                                                                          |
 | Tests          | Vitest, React Testing Library, MSW, Playwright, `@axe-core/playwright`                                                                                                                         |
 | Containers     | Docker (multi-stage), Docker Compose (local only), NGINX unprivileged (`gate` target)                                                                                                          |
-| Cloud          | Google Cloud Run, Artifact Registry                                                                                                                                                            |
+| Cloud          | Google Cloud Run, Artifact Registry, in `us-central1`. One existing GCP project per environment (see §6.2)                                                                                     |
 | IaC / CI       | Terraform (remote state in GCS), GitHub Actions                                                                                                                                                |
 | Secrets        | GitHub Secrets (environment-scoped), injected at deploy time. No Google Secret Manager                                                                                                         |
 
@@ -114,6 +114,19 @@ previews that serve mock data, the password is unique to this project and rotate
 deploy, and the values are never stored in Terraform state or Git. Production has no gate and no
 such secrets.
 
+GCP projects: each environment deploys to its own existing project, all in `us-central1`. The
+owner's shared GitHub Actions setup already exists in each project: the Workload Identity pool
+`github-pool`, the provider `github-provider` (restricted to `repository_owner == 'M-oliveda'`) and
+a `cicd-deployer-<suffix>` service account. This repository is bound to each deployer with
+`roles/iam.workloadIdentityUser`, scoped to `attribute.repository/M-oliveda/buzzvel-fe_web`.
+
+| GitHub Environment | GCP project                    | Deployer service account                                                  |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------- |
+| `preview`          | `moliveda-gcloudprojects-prev` | `cicd-deployer-prev@moliveda-gcloudprojects-prev.iam.gserviceaccount.com` |
+| `develop`          | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@moliveda-gcloudprojects-dev.iam.gserviceaccount.com`   |
+| `staging`          | `moliveda-gcloudprojects-stg`  | `cicd-deployer-stg@moliveda-gcloudprojects-stg.iam.gserviceaccount.com`   |
+| `production`       | `moliveda-gcloudprojects-prod` | `cicd-deployer-prod@moliveda-gcloudprojects-prod.iam.gserviceaccount.com` |
+
 Health: `GET /health` (liveness, no dependencies) and `GET /ready` (readiness; trivial here because
 there are no downstream dependencies, kept for contract consistency). NGINX exempts both from basic
 auth so Cloud Run probes work.
@@ -132,8 +145,8 @@ buzzvel-fe_web/
 │   └── nginx/                nginx.conf.template · entrypoint.sh
 ├── infra/
 │   └── terraform/
-│       ├── bootstrap/        state bucket + WIF (run once, documented)
-│       ├── modules/          artifact-registry · cloud-run-service · iam-wif · domain
+│       ├── bootstrap/        state bucket (run once, documented; WIF and deployers pre-exist)
+│       ├── modules/          artifact-registry · cloud-run-service · runtime-sa · domain
 │       └── envs/             develop.tfvars · staging.tfvars · production.tfvars
 ├── public/                   images (AVIF/WebP + fallbacks) · favicon · og image
 ├── src/
@@ -203,6 +216,10 @@ any confidential material never enter Git.
 | `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL | Yes                         | Candidate for the next stable release                                                                                  |
 | `production` | Tag `vX.Y.Z` (from `main`)  | `https://buzzvel-fe.moliveda.dev`  | **No**                      | Image promoted from the tagged commit. Min instances 1 during the evaluation window (Nov 20 → Dec 4), then review cost |
 
+Each deploy job runs in the GitHub Environment of the same name, which supplies that environment's
+GCP project, WIF provider and deployer (§6.2, Appendix A) and, when it is gated, its basic-auth
+secrets.
+
 ### Pipeline stages (GitHub Actions)
 
 1. **`ci.yml`** (every push and PR): install (`npm ci`), `format:check`, `lint`, `typecheck`, unit
@@ -261,6 +278,7 @@ radii, shadows, container width. Until I3 arrives, no styling work starts beyond
 | Lorem ipsum in the people section                   | Keep the placeholder text as in the design.                                                                                               |
 | No mobile menu, tablet layout or interaction states | Design them in the same visual language; document in the README.                                                                          |
 | Contact form behaviour                              | Zod + React Hook Form validation, accessible errors, submit to mock `POST /api/v1/contact`, success and failure states. No email is sent. |
+| GCP layout (I1, decided 2026-11-18)                 | One existing project per environment (§6.2), region `us-central1`. Reuse the shared WIF pool and deployers instead of creating them.      |
 
 ### 10.3.1 UI component library (shadcn-style)
 
@@ -394,25 +412,27 @@ stack is out of scope for a single static page.
 
 - [ ] Create the GitHub repo `buzzvel-fe_web` (public); `main` holds `README.md`, `LICENSE`,
       `.gitignore`. Create `develop`. Protect `main` and `develop` (PR required, CI required).
-- [ ] Scaffold Next.js 16 + TypeScript + Tailwind v4 in `src/` layout; set `.nvmrc`, `engines`,
+  - Done: public repo `M-oliveda/buzzvel-fe_web` with `main` and `develop`.
+  - Open: branch protection on `main` and `develop` (both report "Branch not protected").
+- [x] Scaffold Next.js 16 + TypeScript + Tailwind v4 in `src/` layout; set `.nvmrc`, `engines`,
       exact dependency versions.
-- [ ] Add dependencies: `framer-motion`, `lucide-react`, `zod`, `react-hook-form`,
+- [x] Add dependencies: `framer-motion`, `lucide-react`, `zod`, `react-hook-form`,
       `@hookform/resolvers`, `clsx`, `tailwind-merge`, `class-variance-authority`,
       `@radix-ui/react-slot`, `winston`; dev: Vitest, RTL, MSW, Playwright, axe, ESLint plugins,
       Prettier + Tailwind plugin, Husky, lint-staged.
-- [ ] Configure ESLint (flat), Prettier (charter config), `tsconfig` `strict` + path alias `@/*`,
+- [x] Configure ESLint (flat), Prettier (charter config), `tsconfig` `strict` + path alias `@/*`,
       `.editorconfig`.
-- [ ] Husky hooks per §11.1, merged with the owner's scripts (I6).
-- [ ] `package.json` scripts: `dev`, `build`, `start`, `lint`, `format`, `format:check`,
+- [x] Husky hooks per §11.1, merged with the owner's scripts (I6).
+- [x] `package.json` scripts: `dev`, `build`, `start`, `lint`, `format`, `format:check`,
       `typecheck`, `test`, `test:cov`, `test:e2e`, `prepare`.
-- [ ] `Dockerfile`: stages `base` → `deps` → `dev` → `builder` → `app` (standalone, non-root,
+- [x] `Dockerfile`: stages `base` → `deps` → `dev` → `builder` → `app` (standalone, non-root,
       `HEALTHCHECK /health`) and `gate` (nginx-unprivileged). Pinned base image tags, verified
       against current LTS.
-- [ ] `docker-compose.yaml` (local only): `web` with bind mounts and hot reload, ports exposed;
+- [x] `docker-compose.yaml` (local only): `web` with bind mounts and hot reload, ports exposed;
       optional `gate` profile to exercise NGINX locally.
-- [ ] `health` and `ready` route handlers with tests.
-- [ ] `.env.example`, `src/lib/env.ts` with Zod validation.
-- [ ] Generate `AGENTS.md` (project context, commands, conventions, security rules) and `CLAUDE.md`
+- [x] `health` and `ready` route handlers with tests.
+- [x] `.env.example`, `src/lib/env.ts` with Zod validation.
+- [x] Generate `AGENTS.md` (project context, commands, conventions, security rules) and `CLAUDE.md`
       as a symlink to it.
 - [ ] Write the first CI workflow (`ci.yml`) and make it green on an empty page. _(Workflow written
       and every step verified locally; green run pending the first push.)_
@@ -423,13 +443,23 @@ stack is out of scope for a single static page.
 
 - [ ] Bootstrap (documented, run once): GCS bucket for Terraform state, enable APIs (Run, Artifact
       Registry, IAM Credentials; Secret Manager and Cloud Build not required).
-- [ ] GitHub setup: create GitHub Environments (`develop`, `staging`, `preview`) and store
-      `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` as environment secrets in each; repository
-      variables for the `GCP_*` values.
-- [ ] Terraform modules: Artifact Registry repo, service accounts (deployer, runtime), Workload
-      Identity Federation for the GitHub repo, Cloud Run services for `develop`, `staging`,
-      `production` (production without the gate container). Terraform ignores `image` and env var
-      changes (`lifecycle.ignore_changes`) so secret values never reach state.
+  - Done: the three APIs are already enabled in all four projects (§6.2).
+  - Open: Terraform state bucket.
+- [ ] GitHub setup: create GitHub Environments (`preview`, `develop`, `staging`, `production`) and
+      store `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` as environment secrets in the gated
+      ones; `GCP_*` values as variables.
+  - Done (2026-11-18): the four environments exist. Repository variables `GCP_REGION` and
+    `ARTIFACT_REGISTRY_REPO` are set, and so are the environment variables `GCP_PROJECT_ID`,
+    `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` (Appendix A). This repository is
+    bound to each project's `cicd-deployer-*` service account through WIF.
+  - Open: the owner sets the basic-auth secrets in `preview`, `develop` and `staging`; deployment
+    branch/tag rules per environment (e.g. `production` limited to `v*` tags).
+- [ ] Terraform modules: Artifact Registry repo, runtime service account, Cloud Run services for
+      `develop`, `staging`, `production` (production without the gate container), one state per
+      project. The WIF pool, provider and deployer service accounts already exist (§6.2) and are not
+      managed here. Terraform ignores `image` and env var changes (`lifecycle.ignore_changes`) so
+      secret values never reach state.
+  - Open: the `buzzvel-fe` Artifact Registry repository does not exist yet in any project.
 - [ ] NGINX gate: `nginx.conf.template` (basic auth, `/health` and `/ready` exempt, `X-Robots-Tag`,
       `limit_req`, proxy to `127.0.0.1:3000`); `entrypoint.sh` reads `BASIC_AUTH_USERNAME` and
       `BASIC_AUTH_PASSWORD` at container start, fails fast if either is missing, hashes the password
@@ -437,6 +467,9 @@ stack is out of scope for a single static page.
       two GitHub secrets into the gate container on Cloud Run.
 - [ ] Workflows: build and push, `deploy-preview`, `cleanup-preview`, `deploy-env`, `release`.
       Same-repo guard on preview.
+  - Open (owner decision): because staging and production are separate projects, `release` cannot
+    promote the staging image without granting the production deployer read access to the staging
+    registry; the alternative is rebuilding the tagged commit in production.
 - [ ] Verify: PR → preview URL commented; merge to `develop` → develop service updates;
       unauthenticated request to a gated env returns 401; `/health` returns 200 without auth.
 - [ ] Terraform `fmt`/`validate` in CI.
@@ -446,10 +479,15 @@ stack is out of scope for a single static page.
 ### Phase 3 — Design system and page build
 
 - [ ] Ingest I3/I4: fonts, tokens, optimised images (AVIF/WebP, responsive widths).
+  - Done: fonts (Inter, Plus Jakarta Sans) and tokens from the Figma desktop and mobile frames.
+  - Open: optimised images (I4).
 - [ ] `globals.css` tokens (shadcn semantic naming); shadcn-style `ui` primitives per §10.3.1
       (`Button` with `cva` variants first, then `Badge`, `Card`, `Label`, `Input`, `Textarea`,
       `Field`, `Eyebrow`, `Container`, `SectionHeading`) with unit tests.
+  - Done: `globals.css` tokens (colours, fluid type scale, radii, shadows, layout).
+  - Open: the `ui` primitives and their tests.
 - [ ] `RootLayout` with `next/font`, metadata, skip link, `MotionProvider`.
+  - Done: `next/font` and metadata. Open: skip link, `MotionProvider`.
 - [ ] Content files (`src/content/*`) from the design copy.
 - [ ] Build sections in order: Header/Footer shell → Hero → Categories → Featured course → How it
       works → Testimonial/Stats → People → Contact (static) → CTA band.
@@ -506,10 +544,14 @@ stack is out of scope for a single static page.
 | `BASIC_AUTH_HTPASSWD_FILE`       | gate            | Path where the entrypoint writes the htpasswd file                  | No      |
 | `BASIC_AUTH_USERNAME`            | GitHub Secrets  | Gate username, injected into NGINX per protected GitHub Environment | **Yes** |
 | `BASIC_AUTH_PASSWORD`            | GitHub Secrets  | Gate password, injected into NGINX per protected GitHub Environment | **Yes** |
-| `GCP_PROJECT_ID`                 | CI, Terraform   | Provided by owner (I1)                                              | No      |
-| `GCP_REGION`                     | CI, Terraform   | Provided by owner (I1)                                              | No      |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | CI              | WIF provider resource name                                          | No      |
-| `GCP_SERVICE_ACCOUNT`            | CI              | Deployer service account email                                      | No      |
-| `ARTIFACT_REGISTRY_REPO`         | CI              | Docker repository name                                              | No      |
+| `GCP_PROJECT_ID`                 | CI, Terraform   | GitHub Environment variable: that environment's project (§6.2)      | No      |
+| `GCP_REGION`                     | CI, Terraform   | Repository variable: `us-central1`                                  | No      |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | CI              | GitHub Environment variable: WIF provider resource name             | No      |
+| `GCP_SERVICE_ACCOUNT`            | CI              | GitHub Environment variable: deployer service account email         | No      |
+| `ARTIFACT_REGISTRY_REPO`         | CI              | Repository variable: `buzzvel-fe`                                   | No      |
 
-`.env` is git-ignored; `.env.example` lists names only.
+`.env` is git-ignored; `.env.example` lists names only. The GCP values differ per project, so they
+are set on each GitHub Environment (`preview`, `develop`, `staging`, `production`). The provider
+value is
+`projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider`.
+A job reads them only when it declares `environment:`.
