@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const sectionHeadings = [
@@ -105,5 +106,42 @@ test.describe("smoke", () => {
         ).toContainText("Your message was sent");
 
         expect(violations).toEqual([]);
+    });
+
+    test("robots.txt blocks crawlers outside production", async ({ request }) => {
+        // The e2e server runs with APP_ENV=local; production is covered by robots unit tests.
+        const response = await request.get("/robots.txt");
+
+        expect(response.status()).toBe(200);
+        expect(await response.text()).toMatch(/User-Agent: \*\s+Disallow: \//);
+    });
+
+    test("sitemap.xml lists the canonical home page", async ({ request, baseURL }) => {
+        const response = await request.get("/sitemap.xml");
+
+        expect(response.status()).toBe(200);
+        expect(await response.text()).toContain(`<loc>${baseURL}/</loc>`);
+    });
+
+    test("an unknown URL gets an accessible 404 page with a way home", async ({ page }) => {
+        const response = await page.goto("/this-page-does-not-exist");
+
+        expect(response?.status()).toBe(404);
+        await expect(page).toHaveTitle(/We could not find that page/);
+        await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+            "We could not find that page",
+        );
+        await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+
+        const results = await new AxeBuilder({ page })
+            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+            .analyze();
+        expect(results.violations.map(({ id }) => id)).toEqual([]);
+
+        await page.getByRole("link", { name: "Back to the home page" }).click();
+        await expect(page).toHaveURL(/\/$/);
+        await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+            "Build skills that actually move you forward.",
+        );
     });
 });
