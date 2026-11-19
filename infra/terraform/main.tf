@@ -1,3 +1,6 @@
+# Reference only: written to demonstrate Terraform and never applied. The environments are set up
+# with scripts/gcp-setup.sh and deployed with gcloud from GitHub Actions (README "Terraform").
+#
 # Persistent infrastructure for one environment (MASTERPLAN §6.2, §12 Phase 2). The Workload
 # Identity pool, provider and deployer service accounts are shared with other repositories and
 # are not managed here.
