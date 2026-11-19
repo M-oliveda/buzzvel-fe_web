@@ -22,6 +22,8 @@ export default defineConfig({
                 // Boot hook only called by the Next.js server runtime; the validation it triggers is tested in env.test.ts.
                 "src/instrumentation.ts",
                 "src/instrumentation.node.ts",
+                // Test-only helpers (jsdom browser stubs, MSW server, log capture), never shipped.
+                "src/test/**",
                 // Type-only declarations produce no runtime code.
                 "src/types/**",
                 "src/**/*.d.ts",
