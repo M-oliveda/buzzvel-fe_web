@@ -178,6 +178,8 @@
         font-size: 100%;
         /* Anchor targets land below the sticky header (MASTERPLAN §10.5). */
         scroll-padding-top: var(--header-height);
+        /* Tabbing down the page scrolls the focus ring (2 px + 2 px offset) fully into view. */
+        scroll-padding-bottom: 0.5rem;
     }
 
     @media (prefers-reduced-motion: no-preference) {
