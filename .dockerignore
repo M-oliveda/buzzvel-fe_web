@@ -34,9 +34,10 @@ coverage
 playwright-report
 test-results
 
-# Confidential design material and infrastructure
+# Confidential design material, infrastructure and dev-only scripts
 design
 infra
+scripts
 
 # Container definitions
 docker-compose.yaml

@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "design:compare": "node scripts/compare-design.ts",
     "prepare": "husky"
   },
   "dependencies": {
