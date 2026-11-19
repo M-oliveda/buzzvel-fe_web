@@ -34,10 +34,12 @@ module "cloud_run_service" {
   region                = var.region
   name                  = var.service_name
   service_account_email = module.runtime_sa.email
-  min_instances         = var.min_instances
-  max_instances         = var.max_instances
-  deletion_protection   = var.deletion_protection
-  labels                = local.labels
+  # Gated environments receive traffic through the NGINX gate; production through the app itself.
+  ingress_container   = var.env == "production" ? "app" : "gate"
+  min_instances       = var.min_instances
+  max_instances       = var.max_instances
+  deletion_protection = var.deletion_protection
+  labels              = local.labels
 }
 
 module "domain" {

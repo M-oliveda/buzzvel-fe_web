@@ -22,8 +22,11 @@ resource "google_cloud_run_v2_service" "this" {
       max_instance_count = var.max_instances
     }
 
-    # Placeholder until the first deploy replaces it with the app (and gate) images.
+    # Placeholder until the first deploy replaces it with the app (and gate) images. It carries the
+    # ingress container's name so `gcloud run deploy --container <name>` updates it in place instead
+    # of adding a second container with a port.
     containers {
+      name  = var.ingress_container
       image = "us-docker.pkg.dev/cloudrun/container/hello"
       ports {
         container_port = 8080

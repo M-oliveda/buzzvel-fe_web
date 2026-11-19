@@ -47,3 +47,9 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "ingress_container" {
+  description = "Name of the placeholder container; the deploy workflows reuse it as the ingress container (gate or app)."
+  type        = string
+  default     = "app"
+}
