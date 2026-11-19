@@ -63,10 +63,19 @@ test.describe("smoke", () => {
     });
 
     test("security headers are set", async ({ request }) => {
-        const response = await request.get("/");
-        const headers = response.headers();
+        for (const path of ["/", "/health", "/api/v1/contact"]) {
+            const headers = (await request.get(path)).headers();
+            const csp = headers["content-security-policy"] ?? "";
 
-        expect(headers["x-content-type-options"]).toBe("nosniff");
-        expect(headers["x-powered-by"]).toBeUndefined();
+            expect(csp).toContain("default-src 'self'");
+            expect(csp).toContain("object-src 'none'");
+            expect(csp).toContain("frame-ancestors 'none'");
+            // Production build: eval is only allowed under `next dev`.
+            expect(csp).not.toContain("'unsafe-eval'");
+            expect(headers["x-content-type-options"]).toBe("nosniff");
+            expect(headers["cross-origin-opener-policy"]).toBe("same-origin");
+            expect(headers["strict-transport-security"]).toBe("max-age=31536000");
+            expect(headers["x-powered-by"]).toBeUndefined();
+        }
     });
 });
