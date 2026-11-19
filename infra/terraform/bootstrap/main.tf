@@ -1,3 +1,6 @@
+# Reference only: written to demonstrate Terraform and never applied. The environments are set up
+# with scripts/gcp-setup.sh and deployed with gcloud from GitHub Actions (README "Terraform").
+#
 # One-time setup per project (MASTERPLAN §12 Phase 2, "Bootstrap"): the remote state bucket and
 # the APIs the delivery pipeline needs. Secret Manager and Cloud Build are not required.
 

@@ -46,7 +46,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 A single, responsive landing page for **Luma** (a fictional online-learning platform), built from a
 supplied Figma design as the **Buzzvel Front-End Engineer coding challenge**. Evaluated on design
 accuracy, responsiveness, code quality, working interactions, accessibility and performance. Around
-it sits a production-style delivery setup: Docker, GitHub Actions, Terraform and Google Cloud Run
+it sits a production-style delivery setup: Docker, GitHub Actions, `gcloud` and Google Cloud Run
 with five environments (`local`, `preview`, `develop`, `staging`, `production`). Public repository
 `M-oliveda/buzzvel-fe_web`; production URL `https://buzzvel-fe.moliveda.dev`. Owner: Mauricio
 Oliveda. The submission deadline is tight (MASTERPLAN §12, Phase 6): favour finishing and verifying
@@ -54,18 +54,18 @@ a task over widening it.
 
 ## 3. Stack (pinned, exact versions in `package.json`)
 
-| Area      | Choice                                                                                                                                            |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime   | Node.js **26** — `.nvmrc`, `engines` + `engine-strict`, Docker `node:26.13.1-alpine3.24`                                                          |
-| Framework | Next.js **16.4** App Router in `src/app`, React 19.3, TypeScript 5.9 `strict` + `noUncheckedIndexedAccess`, alias `@/*` → `src/*`                 |
-| Rendering | **Cache Components** (`cacheComponents: true`), Turbopack for dev and build, `output: "standalone"`                                               |
-| Styling   | Tailwind CSS v4 through `@tailwindcss/turbopack` (no PostCSS config), shadcn/ui-style primitives (`cva`, `@radix-ui/react-slot`, `cn`)            |
-| Motion    | `framer-motion`, `lucide-react` icons                                                                                                             |
-| Forms     | React Hook Form + `@hookform/resolvers` + Zod 4                                                                                                   |
-| Logging   | `winston` JSON to stdout (route handlers only)                                                                                                    |
-| Quality   | ESLint 9 (flat config, `eslint-config-next` + `eslint-config-prettier`), Prettier 3 + `prettier-plugin-tailwindcss`, Husky 9, lint-staged         |
-| Tests     | Vitest 5 + React Testing Library + jsdom, MSW, Playwright + `@axe-core/playwright`                                                                |
-| Delivery  | Docker multi-stage, Docker Compose (local only), NGINX unprivileged gate, Cloud Run, Artifact Registry, Terraform, GitHub Actions, GitHub Secrets |
+| Area      | Choice                                                                                                                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime   | Node.js **26** — `.nvmrc`, `engines` + `engine-strict`, Docker `node:26.13.1-alpine3.24`                                                                                   |
+| Framework | Next.js **16.4** App Router in `src/app`, React 19.3, TypeScript 5.9 `strict` + `noUncheckedIndexedAccess`, alias `@/*` → `src/*`                                          |
+| Rendering | **Cache Components** (`cacheComponents: true`), Turbopack for dev and build, `output: "standalone"`                                                                        |
+| Styling   | Tailwind CSS v4 through `@tailwindcss/turbopack` (no PostCSS config), shadcn/ui-style primitives (`cva`, `@radix-ui/react-slot`, `cn`)                                     |
+| Motion    | `framer-motion`, `lucide-react` icons                                                                                                                                      |
+| Forms     | React Hook Form + `@hookform/resolvers` + Zod 4                                                                                                                            |
+| Logging   | `winston` JSON to stdout (route handlers only)                                                                                                                             |
+| Quality   | ESLint 9 (flat config, `eslint-config-next` + `eslint-config-prettier`), Prettier 3 + `prettier-plugin-tailwindcss`, Husky 9, lint-staged                                  |
+| Tests     | Vitest 5 + React Testing Library + jsdom, MSW, Playwright + `@axe-core/playwright`                                                                                         |
+| Delivery  | Docker multi-stage, Docker Compose (local only), NGINX unprivileged gate, Cloud Run, Artifact Registry, `gcloud`, GitHub Actions, GitHub Secrets; Terraform reference only |
 
 `.npmrc` sets `save-exact` and `engine-strict`. Toolchain majors follow what `create-next-app`
 scaffolds for the installed Next.js version. Do not bump a major unless the whole gate suite stays
@@ -202,8 +202,10 @@ src/test/                 test-only helpers: jsdom stubs, MSW server, log captur
 src/instrumentation*.ts   boot-time env validation ....................................... exists
 tests/e2e/                smoke, menu, motion, contact, a11y specs ........................ exists
 docker/nginx/             gate config template + entrypoint .............................. exists
-.github/workflows/        ci.yml exists; deploy-preview, cleanup-preview, deploy-env, release Phase 2
-infra/terraform/          bootstrap/, modules/, envs/ ...................................... Phase 2
+.github/workflows/        ci, build-push-deploy, deploy-env, deploy-preview, cleanup-preview,
+                          deploy-prod (deploys are called from ci.yml after CI passed) ... exists
+infra/terraform/          bootstrap/, modules/ (incl. domain), envs/; reference only ...... exists
+scripts/gcp-setup.sh      one-time gcloud setup per environment (+ gcp/cleanup-policies) . exists
 scripts/compare-design.ts pixel-diff helper ............................................... Phase 5
 design/                   git-ignored Figma frames — confidential, NEVER commit
 ```
@@ -381,18 +383,20 @@ container) does not need approval.
 
 ### 9.3 Phase 2 — cloud and CI/CD guardrails
 
-- Terraform lives in `infra/terraform/` (`bootstrap/`, `modules/`, `envs/*.tfvars`), with remote
-  state in GCS and one state per environment. Run `terraform fmt -check` and `terraform validate`
-  for every change.
-- Cloud Run services ignore `image` and env var changes in Terraform (`lifecycle.ignore_changes`) so
-  deploys own them and secrets never reach state.
+- **Infrastructure is set up with `gcloud`, not Terraform** (owner decision 2026-11-19, MASTERPLAN
+  §10.3). `scripts/gcp-setup.sh <env>` creates the APIs, the Artifact Registry repo, the runtime
+  service account and the production domain mapping; `gcloud run deploy` in `build-push-deploy.yml`
+  creates and configures the Cloud Run services. Keep the two in sync when either changes.
+- `infra/terraform/` (`bootstrap/`, `modules/`, `envs/*.tfvars`) demonstrates Terraform and is
+  **never applied**. CI runs only `terraform fmt -check -recursive`; run it for every change there.
+  Do not wire `init`, `validate`, `plan` or `apply` into workflows.
 - GitHub Actions authenticate to GCP with Workload Identity Federation only, never service-account
   keys. Pin actions to a major version (as in `ci.yml`), set least-privilege `permissions:`, and
   guard preview deploys to same-repo PRs.
 - `GCP_*` values are repository variables; `BASIC_AUTH_USERNAME`/`BASIC_AUTH_PASSWORD` are
   environment secrets injected into the gate container at deploy time.
-- **Never run** `terraform apply`/`destroy`, `gcloud` mutations, deploy workflows or GitHub settings
-  changes without explicit approval. Show the `terraform plan` output to the owner first.
+- **Never run** `scripts/gcp-setup.sh`, `terraform apply`/`destroy`, `gcloud` mutations, deploy
+  workflows or GitHub settings changes without explicit approval.
 
 ### 9.4 Phases 3 and 5 — design implementation
 

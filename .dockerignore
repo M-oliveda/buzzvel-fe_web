@@ -27,6 +27,7 @@ next-env.d.ts
 
 # Docs and AI instructions (not needed at runtime)
 **/*.md
+docs
 
 # Tests and reports
 tests

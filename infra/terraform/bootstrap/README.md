@@ -1,5 +1,9 @@
 # Terraform bootstrap
 
+> **Reference only.** This configuration was written to demonstrate Terraform and has never been
+> applied. The projects are set up with [`scripts/gcp-setup.sh`](../../../scripts/gcp-setup.sh) (see
+> the main README, "Cloud setup (gcloud)").
+
 Run once per GCP project, by the owner, before the per-environment configuration in `..`. It enables
 the three APIs the pipeline needs and creates the `<project>-tfstate` state bucket.
 

@@ -1,0 +1,48 @@
+name: Clean up preview
+
+# Deletes buzzvel-fe-pr-<n> when its pull request into `develop` closes, merged or not
+# (MASTERPLAN §9). Images expire through the registry's cleanup policies.
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete preview service
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: preview
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-buzzvel-fe-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      SERVICE: buzzvel-fe-pr-${{ github.event.pull_request.number }}
+    steps:
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # A pull request whose preview never deployed (CI failed, for example) has nothing to delete.
+      - name: Delete the service if it exists
+        run: |
+          if gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
+            --format='value(metadata.name)' > /dev/null 2>&1; then
+            gcloud run services delete "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --quiet
+          else
+            echo "No service ${SERVICE}; nothing to delete."
+          fi

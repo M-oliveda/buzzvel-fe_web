@@ -17,3 +17,8 @@ output "service_uri" {
   description = "Default run.app URL, or null for preview."
   value       = one(module.cloud_run_service[*].uri)
 }
+
+output "domain_dns_records" {
+  description = "DNS records to add at the registrar for the custom domain (empty when there is none)."
+  value       = one(module.domain[*].dns_records)
+}
