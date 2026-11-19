@@ -1,16 +1,9 @@
 import type { NextConfig } from "next";
 
-// Baseline security headers. A strict Content-Security-Policy is added in Phase 4 (MASTERPLAN §11.3).
-const securityHeaders = [
-    { key: "X-Content-Type-Options", value: "nosniff" },
-    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-    { key: "X-Frame-Options", value: "DENY" },
-    { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-    {
-        key: "Permissions-Policy",
-        value: "camera=(), microphone=(), geolocation=()",
-    },
-];
+import { buildSecurityHeaders } from "./src/lib/security-headers";
+
+// CSP and security headers (MASTERPLAN §11.3); `next dev` additionally allows eval.
+const securityHeaders = buildSecurityHeaders({ isDev: process.env.NODE_ENV === "development" });
 
 const nextConfig: NextConfig = {
     // Self-contained server.js for the Docker `app` target.

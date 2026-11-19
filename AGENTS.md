@@ -182,22 +182,25 @@ MASTERPLAN §7 is the target tree. What exists today versus what is planned:
 ```text
 src/app/                  layout, page (all sections), globals.css, icon.svg,
                           health/, ready/ ................................................ exists
-src/app/api/v1/contact/   mock contact endpoint ........................................ Phase 4
-src/app/{robots,sitemap,not-found,error}.ts(x) ......................................... Phase 4
+src/app/api/v1/contact/   mock contact endpoint ......................................... exists
+src/app/{robots,sitemap,not-found,error}.ts(x) .......................................... exists
 src/components/ui/        button, badge, card, label, input, textarea, field, eyebrow,
                           container, section-heading, avatar-stack ....................... exists
-src/components/layout/    logo, site-header, mobile-menu (Phase 4 hardens it), site-footer,
-                          skip-link ...................................................... exists
+src/components/layout/    logo, site-header, mobile-menu, site-footer, skip-link,
+                          status-page (404 and error layout) ............................. exists
 src/components/sections/  hero, categories, featured-course, how-it-works,
                           testimonial-stats, people, contact (static), cta-band .......... exists
-src/components/motion/    motion-provider exists; reveal, count-up ....................... Phase 4
+src/components/motion/    motion-provider, reveal, count-up .............................. exists
 src/content/              site, footer-links, categories, steps, stats, home; ALL copy and
                           lists go here as typed constants ............................... exists
-src/lib/                  cn.ts, env.ts, health.ts exist; logger, rate-limit, contact-client planned
+src/lib/                  cn, env, health, errors, logger, rate-limit, correlation-id,
+                          contact-client ................................................. exists
 src/types/                content.ts (shared content types) .............................. exists
-src/hooks/ src/schemas/ ................................................................. planned
+src/hooks/                use-focus-trap, use-body-scroll-lock ........................... exists
+src/schemas/              contact.schema.ts (shared by the form and the API) ............. exists
+src/test/                 test-only helpers: jsdom stubs, MSW server, log capture ........ exists
 src/instrumentation*.ts   boot-time env validation ....................................... exists
-tests/e2e/                smoke.spec.ts exists; a11y, contact, menu specs planned
+tests/e2e/                smoke, menu, motion, contact, a11y specs ........................ exists
 docker/nginx/             gate config template + entrypoint .............................. exists
 .github/workflows/        ci.yml exists; deploy-preview, cleanup-preview, deploy-env, release Phase 2
 infra/terraform/          bootstrap/, modules/, envs/ ...................................... Phase 2

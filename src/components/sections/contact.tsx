@@ -1,20 +1,19 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Textarea } from "@/components/ui/textarea";
 import { contact } from "@/content/home";
 import { sectionIds } from "@/content/site";
 
+import { ContactForm } from "./contact-form";
+
 /**
- * Contact info cards and the contact form (form below info on mobile). Static in Phase 3:
- * validation, submission, the honeypot and success/error states arrive with the client form
- * in Phase 4 (MASTERPLAN §10.5).
+ * Contact info cards and the contact form (form below info on mobile). The section stays a
+ * Server Component; only `ContactForm` is a client island.
  */
 export function Contact(): ReactNode {
     const { form } = contact;
@@ -22,7 +21,7 @@ export function Contact(): ReactNode {
     return (
         <section id={sectionIds.contact} aria-labelledby="contact-title" className="bg-background">
             <Container className="grid items-center gap-10 py-section lg:grid-cols-[minmax(0,30rem)_minmax(0,33.75rem)] lg:justify-between lg:gap-12">
-                <div>
+                <Reveal>
                     <SectionHeading
                         titleId="contact-title"
                         eyebrow={contact.eyebrow}
@@ -66,57 +65,17 @@ export function Contact(): ReactNode {
                             </li>
                         ))}
                     </ul>
-                </div>
+                </Reveal>
 
-                <Card className="gap-6 p-5 shadow-card sm:p-10">
-                    <CardHeader>
-                        <CardTitle id="contact-form-title">{form.title}</CardTitle>
-                        <CardDescription>{form.description}</CardDescription>
-                    </CardHeader>
-                    <form
-                        aria-labelledby="contact-form-title"
-                        noValidate
-                        className="flex flex-col gap-6"
-                    >
-                        <div className="flex flex-col gap-5">
-                            <Field id="contact-name" label={form.fields.name.label}>
-                                {(control) => (
-                                    <Input
-                                        {...control}
-                                        name="name"
-                                        autoComplete="name"
-                                        placeholder={form.fields.name.placeholder}
-                                    />
-                                )}
-                            </Field>
-                            <Field id="contact-email" label={form.fields.email.label}>
-                                {(control) => (
-                                    <Input
-                                        {...control}
-                                        type="email"
-                                        name="email"
-                                        autoComplete="email"
-                                        placeholder={form.fields.email.placeholder}
-                                    />
-                                )}
-                            </Field>
-                            <Field id="contact-message" label={form.fields.message.label}>
-                                {(control) => (
-                                    <Textarea
-                                        {...control}
-                                        name="message"
-                                        // 100 px on the mobile frame, 120 px on desktop.
-                                        className="max-lg:min-h-25"
-                                        placeholder={form.fields.message.placeholder}
-                                    />
-                                )}
-                            </Field>
-                        </div>
-                        <Button type="submit" className="w-full">
-                            {form.submit}
-                        </Button>
-                    </form>
-                </Card>
+                <Reveal delay={0.1}>
+                    <Card className="gap-6 p-5 shadow-card sm:p-10">
+                        <CardHeader>
+                            <CardTitle id="contact-form-title">{form.title}</CardTitle>
+                            <CardDescription>{form.description}</CardDescription>
+                        </CardHeader>
+                        <ContactForm labelledBy="contact-form-title" />
+                    </Card>
+                </Reveal>
             </Container>
         </section>
     );

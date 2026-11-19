@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const sectionHeadings = [
@@ -63,10 +64,84 @@ test.describe("smoke", () => {
     });
 
     test("security headers are set", async ({ request }) => {
-        const response = await request.get("/");
-        const headers = response.headers();
+        for (const path of ["/", "/health", "/api/v1/contact"]) {
+            const headers = (await request.get(path)).headers();
+            const csp = headers["content-security-policy"] ?? "";
 
-        expect(headers["x-content-type-options"]).toBe("nosniff");
-        expect(headers["x-powered-by"]).toBeUndefined();
+            expect(csp).toContain("default-src 'self'");
+            expect(csp).toContain("object-src 'none'");
+            expect(csp).toContain("frame-ancestors 'none'");
+            // Production build: eval is only allowed under `next dev`.
+            expect(csp).not.toContain("'unsafe-eval'");
+            expect(headers["x-content-type-options"]).toBe("nosniff");
+            expect(headers["cross-origin-opener-policy"]).toBe("same-origin");
+            expect(headers["strict-transport-security"]).toBe("max-age=31536000");
+            expect(headers["x-powered-by"]).toBeUndefined();
+        }
+    });
+
+    test("the page and the contact form run without CSP violations", async ({ page }) => {
+        const violations: string[] = [];
+        page.on("console", (message) => {
+            if (message.type() === "error" && /content security policy/i.test(message.text())) {
+                violations.push(message.text());
+            }
+        });
+        await page.addInitScript(() => {
+            document.addEventListener("securitypolicyviolation", (event) => {
+                console.error(
+                    `Content Security Policy: ${event.violatedDirective} ${event.blockedURI}`,
+                );
+            });
+        });
+
+        await page.goto("/");
+        await page.keyboard.press("End");
+        await page.getByLabel("Full name").fill("Ada Lovelace");
+        await page.getByLabel("Email").fill("ada@example.com");
+        await page.getByLabel("Your question").fill("Which course should I start with?");
+        await page.getByRole("button", { name: "Send message" }).click();
+        await expect(
+            page.getByRole("form", { name: "Contact us" }).getByRole("status"),
+        ).toContainText("Your message was sent");
+
+        expect(violations).toEqual([]);
+    });
+
+    test("robots.txt blocks crawlers outside production", async ({ request }) => {
+        // The e2e server runs with APP_ENV=local; production is covered by robots unit tests.
+        const response = await request.get("/robots.txt");
+
+        expect(response.status()).toBe(200);
+        expect(await response.text()).toMatch(/User-Agent: \*\s+Disallow: \//);
+    });
+
+    test("sitemap.xml lists the canonical home page", async ({ request, baseURL }) => {
+        const response = await request.get("/sitemap.xml");
+
+        expect(response.status()).toBe(200);
+        expect(await response.text()).toContain(`<loc>${baseURL}/</loc>`);
+    });
+
+    test("an unknown URL gets an accessible 404 page with a way home", async ({ page }) => {
+        const response = await page.goto("/this-page-does-not-exist");
+
+        expect(response?.status()).toBe(404);
+        await expect(page).toHaveTitle(/We could not find that page/);
+        await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+            "We could not find that page",
+        );
+        await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+
+        const results = await new AxeBuilder({ page })
+            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+            .analyze();
+        expect(results.violations.map(({ id }) => id)).toEqual([]);
+
+        await page.getByRole("link", { name: "Back to the home page" }).click();
+        await expect(page).toHaveURL(/\/$/);
+        await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+            "Build skills that actually move you forward.",
+        );
     });
 });

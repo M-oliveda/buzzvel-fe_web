@@ -1,11 +1,13 @@
 "use client";
 
 import { Menu, X } from "lucide-react";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { site } from "@/content/site";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 // Matches Tailwind's `lg` breakpoint, where the inline desktop nav takes over.
 const DESKTOP_QUERY = "(min-width: 64rem)";
@@ -15,13 +17,33 @@ export type MobileMenuProps = {
 };
 
 /**
- * Menu button and drop-down panel for viewports below `lg`. Phase 3 covers open/close, closing
- * on link click and on resize to desktop; the focus trap, `Esc` handling and scroll lock are
- * added in Phase 4 (MASTERPLAN §10.5).
+ * Menu button and drop-down panel for viewports below `lg` (MASTERPLAN §10.5). While open, focus
+ * moves to the first link and is trapped between the button and the panel, the page behind it
+ * does not scroll, and `Esc` closes the menu and returns focus to the button. It also closes on
+ * link click and when the viewport grows to desktop.
  */
 export function MobileMenu({ className }: MobileMenuProps): ReactNode {
     const [open, setOpen] = useState(false);
     const panelId = useId();
+    const rootRef = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+
+    useFocusTrap(rootRef, open, { initialFocus: panelRef });
+    useBodyScrollLock(open);
+
+    useEffect(() => {
+        if (!open) return;
+
+        const closeOnEscape = (event: KeyboardEvent): void => {
+            if (event.key !== "Escape") return;
+            setOpen(false);
+            buttonRef.current?.focus();
+        };
+
+        document.addEventListener("keydown", closeOnEscape);
+        return () => document.removeEventListener("keydown", closeOnEscape);
+    }, [open]);
 
     useEffect(() => {
         if (!open) return;
@@ -38,8 +60,9 @@ export function MobileMenu({ className }: MobileMenuProps): ReactNode {
     const close = (): void => setOpen(false);
 
     return (
-        <div className={className}>
+        <div ref={rootRef} className={className}>
             <Button
+                ref={buttonRef}
                 variant="ghost"
                 size="icon"
                 aria-label={site.menuLabel}
@@ -56,6 +79,7 @@ export function MobileMenu({ className }: MobileMenuProps): ReactNode {
             </Button>
 
             <div
+                ref={panelRef}
                 id={panelId}
                 hidden={!open}
                 className="fixed inset-x-0 top-header bottom-0 z-40 overflow-y-auto bg-muted"

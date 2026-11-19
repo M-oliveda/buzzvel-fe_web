@@ -456,6 +456,12 @@ project are set on each GitHub Environment, so a job sees them only when it decl
 
 Tests assert behaviour the user sees (roles, labels, text), not implementation details.
 
+**Accessibility checks** (`tests/e2e/a11y.spec.ts`, desktop and mobile): axe with the WCAG 2.0–2.2
+A/AA and best-practice rules on the whole page, on the open mobile menu and on the fully revealed
+page with motion allowed; one `h1` and no skipped heading levels; the skip link first; and a
+keyboard walk over every tab stop that checks the focus ring is drawn, contrasts at least 3:1 with
+the surface behind it, and is not hidden under the sticky header.
+
 **Performance targets** (Lighthouse, mobile, production build): Performance ≥ 95, Accessibility 100,
 Best Practices 100, SEO 100; LCP < 2.5 s, CLS < 0.05, TBT < 200 ms; route JavaScript aiming for ≤
 130 kB gzip.
@@ -469,19 +475,26 @@ submission._
 
 ## Security and observability
 
-- **Headers:** CSP and security headers via `next.config.ts` (`X-Content-Type-Options`,
-  `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`).
+- **Headers:** built in `src/lib/security-headers.ts` and sent by `next.config.ts` on every
+  response: a Content-Security-Policy (`default-src 'self'`, same-origin scripts, styles, images,
+  fonts and fetches, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
+  `frame-ancestors 'none'`; `'unsafe-eval'` only under `next dev`), `X-Content-Type-Options`,
+  `Referrer-Policy`, `X-Frame-Options`, `Cross-Origin-Opener-Policy`, `Strict-Transport-Security`
+  and `Permissions-Policy`. A Playwright test loads the page and submits the contact form with zero
+  CSP violations. Zod runs `jitless`, because its `new Function` probe is otherwise reported as a
+  violation.
 - **Input:** validated on client and server; no HTML rendered from user input; honeypot field on the
   contact form.
-- **Rate limiting:** per-IP, in-memory limit on the contact route (per instance); NGINX `limit_req`
-  on gated environments.
+- **Rate limiting:** per-IP, in-memory fixed window on the contact route (per instance, keyed on the
+  first `X-Forwarded-For` entry; `CONTACT_RATE_LIMIT_MAX` per `CONTACT_RATE_LIMIT_WINDOW_MS`, 429
+  with `Retry-After`); NGINX `limit_req` on gated environments.
 - **Containers:** run as non-root.
 - **Secrets:** only in GitHub Secrets (environment-scoped, masked in logs); never in Git, Terraform
   state or images. `npm audit` and Dependabot are enabled.
 - **Logging:** `winston` JSON logs to stdout with `service`, `env` and `correlationId`
-  (`X-Correlation-ID` accepted or generated, and echoed on the response). Message bodies and emails
-  are never logged, only lengths and ids. Cloud Run metrics and Cloud Logging act as the metrics and
-  search layer.
+  (`X-Correlation-ID` accepted when it is 1–128 characters of `A–Z a–z 0–9 . _ -`, otherwise
+  generated, and echoed on the response). Message bodies and emails are never logged, only lengths
+  and ids. Cloud Run metrics and Cloud Logging act as the metrics and search layer.
 
 ## Key decisions
 
@@ -491,9 +504,23 @@ submission._
   ...) are copy-owned primitives in `src/components/ui`, built with `class-variance-authority`
   variants, `asChild` through `@radix-ui/react-slot`, and `className` merged with `cn`. Sections
   compose these primitives instead of restyling raw elements.
-- **Reduced motion is handled in one place.** All animation goes through
-  `MotionConfig reducedMotion="user"` and small wrappers (`Reveal`, `CountUp`). With reduced motion,
-  content is shown immediately and final stat values are always in the DOM.
+- **Reduced motion is handled in two layers.** framer-motion animation goes through
+  `MotionConfig reducedMotion="user"` and small wrappers (`Reveal`, `CountUp`); CSS transitions and
+  animations (hover lifts, colour fades, the hero float) are switched off by one unlayered
+  `prefers-reduced-motion: reduce` rule in `globals.css`, which outranks Tailwind's utility layer
+  without `!important`. With reduced motion, content is shown immediately and final stat values are
+  always in the DOM.
+- **Focus rings that work on every surface.** One global `:focus-visible` outline uses the `ring`
+  token. On the blue featured-course band the blue ring was invisible (1:1), and on the navy footer
+  it was only 3.1:1, so those surfaces set `focus-ring-inverse`, which turns every ring inside them
+  white (5.5:1 and 17:1).
+- **Motion.** Sections below the hero fade and rise in once as they scroll into view (`Reveal`,
+  framer-motion `whileInView`, loaded through `LazyMotion` with `domAnimation` only). The hero is
+  never hidden, so the LCP image and the `h1` paint straight away. Stats count up from zero the
+  first time they are visible; screen readers always get the final value from visually hidden text.
+  The hero chips float in pure CSS for two short cycles and then stop, so the motion ends within 5
+  seconds and needs no pause control (WCAG 2.2.2). With reduced motion nothing moves and everything
+  is visible on load.
 - **Typed content.** All copy lives in typed constants under `src/content`, so components stay free
   of magic strings.
 - **Design tokens once.** Colours, type and spacing are extracted from Figma into `globals.css`
@@ -504,15 +531,32 @@ submission._
   `destructive` (`#c4262e`) is my addition. `text-subtle-foreground` (`#6d7384`) is 4.45:1 on the
   cream surface, just under WCAG AA for body text; it is kept as designed and flagged for review.
 - **Contact form via a versioned REST endpoint.** `POST /api/v1/contact` validates with the same Zod
-  schema as the client, rate-limits and acknowledges. It is a mock and sends no email.
+  schema as the client, rate-limits and acknowledges. It is a mock and sends no email. Responses:
+  `201 {status: "received", id}`; `400` for invalid JSON or `{error: "validation", fieldErrors}`;
+  `413` over 16 KB; `415` for anything but JSON; `429` with `Retry-After`; `500` without details. A
+  filled honeypot gets the same `201` so bots learn nothing, and is logged as `honeypot`.
+- **Contact form behaviour.** React Hook Form with the shared schema validates each field when it
+  loses focus and everything on submit, then focuses the first invalid field. Errors are linked to
+  their fields through `aria-describedby`; server-side field errors are shown the same way. Success
+  is announced in a `role="status"` region that is always mounted, failures (server, network, rate
+  limit) in a `role="alert"` message, and what was typed is kept. While sending, the button reads
+  "Sending…" and is `aria-disabled` rather than `disabled`, so keyboard focus stays on it; repeat
+  submits are ignored.
 - **Layouts the design did not show.** The designs have no tablet layout, mobile menu or interaction
   states. I designed them in the same visual language: a drop-down mobile menu under the header
   (full-width nav links, then Log in and Start learning), two-column category cards and a row of
   stats under the quote on tablet, steps in a row with their connecting line from 768 px, and hover
   and focus states for every interactive element (category cards lift and nudge their arrow on both
   hover and keyboard focus). Hero, featured course, people and contact switch to two columns at 1024
-  px. The mobile menu opens, closes on link click and closes when the window grows to desktop; its
-  focus trap, `Esc` handling and scroll lock are added with the other interactions.
+  px. The mobile menu moves focus to its first link, traps Tab inside the menu, locks page scroll,
+  closes on `Esc` (returning focus to the menu button), on link click and when the window grows to
+  desktop.
+- **Search engines and status pages.** `robots.txt` reads `APP_ENV` on every request, so only
+  production can ever be crawled (everything else answers `Disallow: /`, on top of the gate's
+  `X-Robots-Tag: noindex`), even if an image was built with the wrong environment. `sitemap.xml`
+  lists the single page at its canonical origin. Unknown URLs get a 404 page and rendering errors an
+  error page, both in the site's style with one clear way back home; the error page offers "Try
+  again" and shows the server's error reference, never the error message.
 - **Header links.** The design does not say where the navigation goes, so the links scroll to the
   matching section: Courses and Start learning to the categories, For Teams and Log in to contact,
   Community to the people section and About to "How Luma works". Footer entries without a page
@@ -544,10 +588,15 @@ submission._
 
 _To be completed before submission. Current candidates:_
 
-- A strict Content-Security-Policy is attempted, but a residual `'unsafe-inline'` may remain for
-  Next.js inline scripts.
+- The Content-Security-Policy keeps `'unsafe-inline'` for scripts and styles. The page is
+  prerendered, and Next.js inlines its RSC payload in `<script>` tags; nonces would force every
+  request to render dynamically (and the experimental SRI option only covers external files).
+  framer-motion and the people collage also set inline styles. No user-supplied HTML is ever
+  rendered, which limits the risk. `upgrade-insecure-requests` is left out because every asset is
+  same-origin and Cloud Run is HTTPS-only, while the directive would break plain-HTTP localhost.
 - Rate limiting on the contact endpoint is per instance (in memory); a shared store would be needed
-  at scale.
+  at scale. It is keyed on the first `X-Forwarded-For` entry, which a client can spoof; acceptable
+  for a mock endpoint that sends nothing.
 - The contact form is a mock: no email is sent and nothing is stored.
 - Preview environments are limited to pull requests from the same repository (forks do not receive
   secrets).
@@ -555,10 +604,15 @@ _To be completed before submission. Current candidates:_
   production deployer to have read access to the staging registry; this is not set up yet.
 - Lighthouse scores are measured on the production build; automation against the live URL is
   optional.
-- The route ships about 191 kB of gzipped JavaScript, over the 130 kB target. The Phase 1
+- The route ships about 277 kB of gzipped JavaScript, over the 130 kB target. The Phase 1
   placeholder page, with no client components, already shipped 170 kB: that is the Next.js 16 and
-  React 19 runtime. The page itself adds about 21 kB (mobile menu, `tailwind-merge`, motion
-  provider).
+  React 19 runtime. The page adds about 21 kB (mobile menu, `tailwind-merge`, motion provider), the
+  animations about 41 kB (framer-motion's animation engine 27 kB, `Reveal` 6 kB, `CountUp` 8 kB) and
+  the contact form about 45 kB (React Hook Form, Zod and the resolver). A CSS and
+  `IntersectionObserver` version would save about 39 kB; framer-motion was kept for its
+  reduced-motion handling and consistency with the rest of the motion code.
+- With JavaScript disabled, the sections that reveal on scroll stay hidden (framer-motion writes
+  their starting `opacity: 0` into the server HTML). Search engines still read the text.
 - Mobile copy and colour differences kept at the desktop version: the mobile frame adds "actually"
   to the second step ("professionals who actually use these skills"), shows the people paragraph in
   the primary text colour and a paler step 2 tile. The desktop wording and colours are used on every

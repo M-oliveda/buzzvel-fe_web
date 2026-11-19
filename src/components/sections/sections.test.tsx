@@ -5,6 +5,7 @@ import { contact, cta, featuredCourse, hero, people, testimonial } from "@/conte
 import { sectionIds } from "@/content/site";
 import { stats } from "@/content/stats";
 import { steps } from "@/content/steps";
+import { setReducedMotion } from "@/test/browser-stubs";
 
 import { Categories } from "./categories";
 import { Contact } from "./contact";
@@ -14,6 +15,19 @@ import { Hero } from "./hero";
 import { HowItWorks } from "./how-it-works";
 import { People } from "./people";
 import { TestimonialStats } from "./testimonial-stats";
+
+/** Text announced to assistive technology: everything except `aria-hidden` subtrees. */
+function accessibleText(element: HTMLElement): string {
+    const clone = element.cloneNode(true) as HTMLElement;
+    for (const hidden of clone.querySelectorAll("[aria-hidden='true']")) hidden.remove();
+    return clone.textContent ?? "";
+}
+
+// These tests cover content, not motion: render the static, fully revealed state. Reveal and
+// CountUp have their own motion tests.
+beforeEach(() => {
+    setReducedMotion(true);
+});
 
 describe("Hero", () => {
     it("renders the page title as the only level-one heading", () => {
@@ -131,7 +145,8 @@ describe("TestimonialStats", () => {
         render(<TestimonialStats />);
 
         const terms = screen.getAllByRole("term").map((term) => term.textContent);
-        const values = screen.getAllByRole("definition").map((value) => value.textContent);
+        // The animated digits are aria-hidden; the final value is the accessible text.
+        const values = screen.getAllByRole("definition").map(accessibleText);
         expect(terms).toEqual(stats.map((stat) => stat.label));
         expect(values).toEqual(stats.map((stat) => stat.value));
     });

@@ -224,7 +224,21 @@ export type ContactContent = {
             email: { label: string; placeholder: string };
             message: { label: string; placeholder: string };
         };
+        /** Validation messages, shared by the client form and the API (contact.schema.ts). */
+        errors: {
+            nameTooShort: string;
+            nameTooLong: string;
+            emailInvalid: string;
+            emailTooLong: string;
+            messageTooShort: string;
+            messageTooLong: string;
+        };
+        /** Hidden honeypot field; only bots fill it in. */
+        honeypotLabel: string;
         submit: string;
+        pending: string;
+        success: string;
+        failure: { server: string; network: string; rateLimited: string };
     };
 };
 
@@ -255,7 +269,24 @@ export const contact: ContactContent = {
             email: { label: "Email", placeholder: "youremail@example.com" },
             message: { label: "Your question", placeholder: "Tell us how we can help..." },
         },
+        errors: {
+            nameTooShort: "Enter your full name (at least 2 characters).",
+            nameTooLong: "Keep your name under 100 characters.",
+            emailInvalid: "Enter a valid email address, like name@example.com.",
+            emailTooLong: "Keep your email under 254 characters.",
+            messageTooShort: "Tell us a little more (at least 10 characters).",
+            messageTooLong: "Keep your question under 2,000 characters.",
+        },
+        honeypotLabel: "Leave this field empty",
         submit: "Send message",
+        pending: "Sending…",
+        success: "Thanks! Your message was sent. We will reply within 24 hours on business days.",
+        failure: {
+            server: "Something went wrong on our side and your message was not sent. Please try again.",
+            network: "We could not reach the server. Check your connection and try again.",
+            rateLimited:
+                "You have sent several messages in a short time. Please wait a few minutes and try again.",
+        },
     },
 };
 

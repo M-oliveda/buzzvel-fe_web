@@ -99,6 +99,55 @@ describe("MobileMenu", () => {
         expect(button).toHaveAttribute("aria-expanded", "false");
     });
 
+    it("moves focus to the first link when opened and traps Tab inside the menu", async () => {
+        stubMatchMedia();
+        const user = userEvent.setup();
+        render(<MobileMenu />);
+
+        const button = screen.getByRole("button", { name: site.menuLabel });
+        await user.click(button);
+
+        const [firstLink] = site.nav.links;
+        expect(within(getPanel()).getByRole("link", { name: firstLink?.label })).toHaveFocus();
+
+        // Last element (primary action) wraps to the menu button, then Shift+Tab wraps back.
+        within(getPanel()).getByRole("link", { name: site.actions.primary.label }).focus();
+        await user.tab();
+        expect(button).toHaveFocus();
+        await user.tab({ shift: true });
+        expect(
+            within(getPanel()).getByRole("link", { name: site.actions.primary.label }),
+        ).toHaveFocus();
+    });
+
+    it("closes on Escape and returns focus to the menu button", async () => {
+        stubMatchMedia();
+        const user = userEvent.setup();
+        render(<MobileMenu />);
+
+        const button = screen.getByRole("button", { name: site.menuLabel });
+        await user.click(button);
+        await user.keyboard("{Escape}");
+
+        expect(button).toHaveAttribute("aria-expanded", "false");
+        expect(button).toHaveFocus();
+    });
+
+    it("locks page scroll only while open", async () => {
+        stubMatchMedia();
+        const user = userEvent.setup();
+        render(<MobileMenu />);
+
+        const button = screen.getByRole("button", { name: site.menuLabel });
+        expect(document.body.style.overflow).toBe("");
+
+        await user.click(button);
+        expect(document.body.style.overflow).toBe("hidden");
+
+        await user.click(button);
+        expect(document.body.style.overflow).toBe("");
+    });
+
     it("closes when the viewport grows to the desktop breakpoint", async () => {
         const media = stubMatchMedia();
         const user = userEvent.setup();

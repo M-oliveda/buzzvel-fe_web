@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -31,7 +32,7 @@ export function People(): ReactNode {
             className="overflow-hidden bg-muted"
         >
             <Container className="grid items-center gap-6 py-section lg:grid-cols-2 lg:gap-15">
-                <div className="flex flex-col items-start">
+                <Reveal className="flex flex-col items-start">
                     <SectionHeading
                         titleId="people-title"
                         spacing="loose"
@@ -42,9 +43,12 @@ export function People(): ReactNode {
                     <Button asChild variant="outline" className="mt-8">
                         <a href={people.cta.href}>{people.cta.label}</a>
                     </Button>
-                </div>
+                </Reveal>
 
-                <div className="@container mx-auto w-full max-w-132.5 [--collage-y:0.9] lg:[--collage-y:1]">
+                <Reveal
+                    delay={0.1}
+                    className="@container mx-auto w-full max-w-132.5 [--collage-y:0.9] lg:[--collage-y:1]"
+                >
                     <div
                         role="group"
                         aria-label={people.collageLabel}
@@ -72,7 +76,7 @@ export function People(): ReactNode {
                             </div>
                         ))}
                     </div>
-                </div>
+                </Reveal>
             </Container>
         </section>
     );

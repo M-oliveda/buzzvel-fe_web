@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/motion/reveal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -14,10 +15,10 @@ export function FeaturedCourse(): ReactNode {
         <section
             id={sectionIds.featured}
             aria-labelledby="featured-course-title"
-            className="bg-primary text-on-dark"
+            className="bg-primary text-on-dark focus-ring-inverse"
         >
             <Container className="grid items-center gap-12 py-section lg:grid-cols-2 lg:gap-15">
-                <div className="relative">
+                <Reveal className="relative">
                     <div className="relative aspect-[538/408] overflow-hidden rounded-xl bg-secondary">
                         <Image
                             src={featuredCourse.image.src}
@@ -28,9 +29,9 @@ export function FeaturedCourse(): ReactNode {
                         />
                     </div>
                     <Badge className="absolute -top-3 -left-3">{featuredCourse.tag}</Badge>
-                </div>
+                </Reveal>
 
-                <div className="flex flex-col items-start">
+                <Reveal delay={0.1} className="flex flex-col items-start">
                     <SectionHeading
                         titleId="featured-course-title"
                         tone="on-dark"
@@ -60,7 +61,7 @@ export function FeaturedCourse(): ReactNode {
                             </a>
                         </Button>
                     </div>
-                </div>
+                </Reveal>
             </Container>
         </section>
     );

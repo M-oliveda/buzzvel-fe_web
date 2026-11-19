@@ -543,15 +543,72 @@ stack is out of scope for a single static page.
 
 ### Phase 4 — Interactions, accessibility and motion
 
-- [ ] Mobile menu (focus trap, `Esc`, scroll lock, restore focus).
-- [ ] `Reveal`, `CountUp`, hero float; verify with `prefers-reduced-motion`.
-- [ ] Contact form: schema, RHF, API route, rate limit, honeypot, states, logging.
-- [ ] Hover/focus states everywhere; keyboard-only walkthrough.
-- [ ] Headings hierarchy (one `h1`), landmarks, `alt` text, contrast audit, `lang`, link text
+- [x] Mobile menu (focus trap, `Esc`, scroll lock, restore focus).
+  - Done (2026-11-18): `useFocusTrap` and `useBodyScrollLock` hooks; focus moves to the first link
+    on open and cycles between the menu button and the panel; `Esc` closes and restores focus. Unit
+    tests plus a keyboard-only Playwright spec (`tests/e2e/menu.spec.ts`).
+- [x] `Reveal`, `CountUp`, hero float; verify with `prefers-reduced-motion`.
+  - Done (2026-11-18): `Reveal` (`m.div` + `whileInView`, once) wraps every section below the hero;
+    `CountUp` resets off-screen stats to zero after hydration and counts up in view, with the final
+    value always in the DOM as visually hidden text. Under reduced motion both render their final
+    state on hydration. Hero chips float in CSS only (`motion-safe:`), two 2.2 s cycles that end by
+    4.8 s (WCAG 2.2.2, owner decision). `MotionProvider` loads `LazyMotion` + `domAnimation`. Unit
+    tests (100 % on `motion/`) and `tests/e2e/motion.spec.ts` (reduced and allowed motion).
+  - Decided (2026-11-18): keep framer-motion for `Reveal` and `CountUp` although it raises the route
+    JS from 191 kB to 232 kB gzip (engine +27, `Reveal` +6, `CountUp` +8, measured). A
+    CSS/`IntersectionObserver` alternative (≈ 193 kB) was declined. Recorded in README Known gaps.
+  - Accepted gap (owner decision): with JavaScript disabled, `Reveal` content stays hidden.
+  - Checked: no horizontal scroll, no console errors and page heights identical to Phase 3 at 320,
+    390, 768, 1024, 1440 and 1920.
+- [x] Contact form: schema, RHF, API route, rate limit, honeypot, states, logging.
+  - Done (2026-11-18): one Zod schema (`src/schemas/contact.schema.ts`) for the RHF client island
+    and `POST /api/v1/contact` (201, 400, 413, 415, 429 with `Retry-After`, 500); in-memory
+    fixed-window limiter; honeypot answered with a fake 201; winston JSON logs with correlation id
+    and field lengths only (verified in the container: no submitted text in the logs). Unit tests
+    with real `Request` objects and MSW, plus `tests/e2e/contact.spec.ts` (keyboard flow, errors,
+    server failure, axe on each state).
+  - Decided (2026-11-18, owner): rate-limit key is the first `X-Forwarded-For` entry (spoofable, per
+    instance, in README Known gaps); the pending submit button is `aria-disabled` instead of
+    `disabled` so focus stays on it (§10.5).
+  - Measured: route JS 232 kB → 277 kB gzip (+45 kB for React Hook Form, Zod and the resolver).
+- [x] Hover/focus states everywhere; keyboard-only walkthrough.
+  - Done (2026-11-18): audit of all tab stops (36 on desktop): every hover target has a focus ring
+    or a matching focus style. Found and fixed: the blue ring was invisible on the blue
+    featured-course band (1:1) and weak on the navy footer (3.1:1); both surfaces now set
+    `focus-ring-inverse` (white ring, 5.5:1 and 17:1). CSS transitions now stop under reduced motion
+    (unlayered rule in `globals.css`). `tests/e2e/a11y.spec.ts` walks every tab stop and checks that
+    the ring is drawn, contrasts ≥ 3:1 with its surface and is not under the sticky header; it
+    failed on the old code and passes now.
+- [x] Headings hierarchy (one `h1`), landmarks, `alt` text, contrast audit, `lang`, link text
       quality.
-- [ ] Security headers and CSP attempt.
+  - Done (2026-11-18): axe (WCAG 2.0–2.2 A/AA + best-practice) reports zero violations at 390 and
+    1440, with the mobile menu open, and on the fully revealed page with motion allowed. One `h1`,
+    no skipped heading levels, named landmarks, `lang="en"` and the skip link first are asserted in
+    `a11y.spec.ts`. Kept and documented: placeholder text at 4.45:1, and footer links without a page
+    (`#`).
+- [x] Security headers and CSP attempt.
+  - Done (2026-11-18): static CSP from `src/lib/security-headers.ts` via `next.config.ts`
+    (`default-src 'self'`, `'unsafe-inline'` scripts and styles, `'unsafe-eval'` in dev only,
+    `object-src 'none'`, `base-uri`/`form-action 'self'`, `frame-ancestors 'none'`), plus COOP
+    `same-origin`, HSTS `max-age=31536000`, `X-Frame-Options`, `Referrer-Policy`, `nosniff` and
+    `Permissions-Policy` (adds `payment`, `usb`). Verified on `/`, probes, the API and static files
+    in the `app` image, and with zero CSP violations in production (e2e) and in dev (HMR socket
+    connects). Zod set to `jitless`: its `new Function` probe was reported as a violation.
+  - Residual: `'unsafe-inline'` (prerendered page, owner decision §12 Phase 4); no
+    `upgrade-insecure-requests` (breaks plain-HTTP localhost). Both in README Known gaps.
+- [x] `robots.ts`, `sitemap.ts`, `not-found.tsx`, `error.tsx` (§7, §10.7; added to Phase 4 by owner
+      decision).
+  - Done (2026-11-18): `robots.txt` reads `APP_ENV` per request (`connection()`): production allows
+    `/` except `/api/` and links the sitemap; every other environment disallows `/` (verified from
+    one image run with both values). `sitemap.xml` lists the canonical home page (build-time origin,
+    like the canonical link). A shared `StatusPage` layout backs the 404 page (404 status, title,
+    `noindex`, zero axe violations, home link) and the `error.tsx` boundary (`retry()`, home link,
+    server `digest` as a reference, never the error message). No `global-error.tsx`: an invalid
+    environment already stops the server at boot. Unit tests plus smoke e2e.
 - **Exit criteria:** axe reports zero violations; whole page operable by keyboard; reduced-motion
   shows static content.
+  - Met (2026-11-18): all three are checked by `a11y.spec.ts`, `menu.spec.ts`, `contact.spec.ts` and
+    `motion.spec.ts` on desktop and mobile. Every Phase 4 box is closed.
 
 ### Phase 5 — Pixel-perfect pass, tests and performance
 

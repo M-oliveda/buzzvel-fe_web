@@ -29,6 +29,18 @@ export type SiteContent = {
     };
     /** Name of the mobile menu button; `aria-expanded` conveys whether it is open. */
     menuLabel: string;
+    /** Copy for the 404 page (`app/not-found.tsx`) and the error boundary (`app/error.tsx`). */
+    statusPages: {
+        notFound: StatusPageContent;
+        error: StatusPageContent & { retry: string; reference: string };
+    };
+};
+
+export type StatusPageContent = {
+    eyebrow: string;
+    title: string;
+    description: string;
+    home: NavLink;
 };
 
 // Section anchors the header links scroll to; each section sets the matching id.
@@ -68,4 +80,22 @@ export const site: SiteContent = {
         primary: { label: "Start learning", href: `#${sectionIds.courses}` },
     },
     menuLabel: "Menu",
+    statusPages: {
+        notFound: {
+            eyebrow: "Error 404",
+            title: "We could not find that page",
+            description:
+                "The link may be broken or the page may have moved. Everything Luma offers starts on the home page.",
+            home: { label: "Back to the home page", href: "/" },
+        },
+        error: {
+            eyebrow: "Something went wrong",
+            title: "This page did not load properly",
+            description:
+                "It is probably a temporary problem on our side. Try again, or go back to the home page.",
+            retry: "Try again",
+            home: { label: "Back to the home page", href: "/" },
+            reference: "Reference",
+        },
+    },
 };
