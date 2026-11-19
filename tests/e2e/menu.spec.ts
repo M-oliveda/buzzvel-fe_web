@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { WEBKIT_TAB_ORDER } from "./browser-notes";
+
 // The menu only exists below `lg`; the desktop project covers the inline nav in smoke.spec.ts.
 test.describe("mobile menu (keyboard only)", () => {
     test.beforeEach(({ isMobile }) => {
@@ -30,7 +32,10 @@ test.describe("mobile menu (keyboard only)", () => {
 
     test("choosing a link with Enter closes the menu and jumps to the section", async ({
         page,
+        browserName,
     }) => {
+        // The focus trap handles Tab at the edges only; inside the menu the browser moves focus.
+        test.skip(browserName === "webkit", WEBKIT_TAB_ORDER);
         await page.goto("/");
         const button = page.getByRole("button", { name: "Menu" });
 

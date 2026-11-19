@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { WEBKIT_TAB_ORDER } from "./browser-notes";
+
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"];
 
 async function expectNoAxeViolations(page: Page): Promise<void> {
@@ -110,7 +112,9 @@ test.describe("accessibility, reduced motion", () => {
 
     test("the skip link is the first tab stop and moves focus to the main content", async ({
         page,
+        browserName,
     }) => {
+        test.skip(browserName === "webkit", WEBKIT_TAB_ORDER);
         await page.goto("/");
 
         await page.keyboard.press("Tab");
@@ -125,7 +129,9 @@ test.describe("accessibility, reduced motion", () => {
     test("every tab stop shows a contrasting focus ring and stays in view", async ({
         page,
         isMobile,
+        browserName,
     }) => {
+        test.skip(browserName === "webkit", WEBKIT_TAB_ORDER);
         await page.goto("/");
         const stops: FocusStop[] = [];
 

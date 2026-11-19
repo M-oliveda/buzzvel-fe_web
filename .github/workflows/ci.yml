@@ -99,9 +99,10 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      # Playwright's webServer runs `next build` and serves the production build.
+      # Playwright's webServer runs `next build` and serves the production build. Only the Chromium
+      # projects run here; Firefox and WebKit are checked locally (MASTERPLAN §12, Phase 5).
       - name: Playwright
-        run: npm run test:e2e
+        run: npm run test:e2e -- --project=desktop --project=mobile
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
