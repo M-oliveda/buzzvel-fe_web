@@ -32,6 +32,8 @@ export default defineConfig({
         env: {
             APP_ENV: "local",
             NEXT_PUBLIC_SITE_URL: baseURL,
+            // Both projects, parallel workers and retries share one IP: keep 429 out of e2e.
+            CONTACT_RATE_LIMIT_MAX: "1000",
         },
     },
 });

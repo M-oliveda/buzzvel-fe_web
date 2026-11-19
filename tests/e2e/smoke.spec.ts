@@ -78,4 +78,32 @@ test.describe("smoke", () => {
             expect(headers["x-powered-by"]).toBeUndefined();
         }
     });
+
+    test("the page and the contact form run without CSP violations", async ({ page }) => {
+        const violations: string[] = [];
+        page.on("console", (message) => {
+            if (message.type() === "error" && /content security policy/i.test(message.text())) {
+                violations.push(message.text());
+            }
+        });
+        await page.addInitScript(() => {
+            document.addEventListener("securitypolicyviolation", (event) => {
+                console.error(
+                    `Content Security Policy: ${event.violatedDirective} ${event.blockedURI}`,
+                );
+            });
+        });
+
+        await page.goto("/");
+        await page.keyboard.press("End");
+        await page.getByLabel("Full name").fill("Ada Lovelace");
+        await page.getByLabel("Email").fill("ada@example.com");
+        await page.getByLabel("Your question").fill("Which course should I start with?");
+        await page.getByRole("button", { name: "Send message" }).click();
+        await expect(
+            page.getByRole("form", { name: "Contact us" }).getByRole("status"),
+        ).toContainText("Your message was sent");
+
+        expect(violations).toEqual([]);
+    });
 });
