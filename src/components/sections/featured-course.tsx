@@ -17,7 +17,7 @@ export function FeaturedCourse(): ReactNode {
             aria-labelledby="featured-course-title"
             className="bg-primary text-on-dark focus-ring-inverse"
         >
-            <Container className="grid items-center gap-12 py-section lg:grid-cols-2 lg:gap-15">
+            <Container className="grid items-center gap-12 py-section lg:grid-cols-[538fr_522fr] lg:gap-15">
                 <Reveal className="relative">
                     <div className="relative aspect-[538/408] overflow-hidden rounded-xl bg-secondary">
                         <Image

@@ -34,7 +34,7 @@ export function Categories(): ReactNode {
                             <Reveal delay={index * 0.08} className="flex w-full">
                                 <Card
                                     asChild
-                                    className="group w-full justify-between pb-5 transition-[translate,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-card focus-visible:-translate-y-1 focus-visible:shadow-card lg:min-h-65 lg:pb-7"
+                                    className="group w-full justify-between p-6 pb-5 transition-[translate,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-card focus-visible:-translate-y-1 focus-visible:shadow-card lg:min-h-65 lg:p-7"
                                 >
                                     <a href={category.href}>
                                         <span className="flex flex-col">

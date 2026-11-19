@@ -102,6 +102,8 @@ export type CollageImage = ContentImage & {
 export type CollageColumn = {
     /** Top offset of the column in design pixels. */
     offset: number;
+    /** Offset below `lg` when the mobile frame differs (defaults to `offset`). */
+    mobileOffset?: number;
     align: "start" | "end";
     images: readonly CollageImage[];
 };
@@ -159,6 +161,8 @@ export const people: PeopleContent = {
         },
         {
             offset: 25.68,
+            // The mobile frame draws this column without its top offset.
+            mobileOffset: 0,
             align: "start",
             images: [
                 photo(3, "Student in a hoodie reading a book", [1880, 1253], [102.72, 170.13]),

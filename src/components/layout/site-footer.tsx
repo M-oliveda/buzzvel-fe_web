@@ -12,10 +12,10 @@ export function SiteFooter(): ReactNode {
     return (
         <footer className="bg-navy text-on-dark focus-ring-inverse">
             <Container className="pt-15 pb-6 lg:pt-20 lg:pb-10">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-10 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-8">
+                <div className="grid grid-cols-2 gap-x-10 gap-y-10 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-8">
                     <div className="col-span-2 lg:col-span-1">
                         <Logo tone="on-dark" />
-                        <p className="mt-2 text-body text-on-dark-subtle lg:mt-3 lg:max-w-60">
+                        <p className="mt-1.25 text-body text-on-dark-subtle lg:mt-3 lg:max-w-60">
                             {footer.tagline}
                         </p>
                     </div>
@@ -47,7 +47,7 @@ export function SiteFooter(): ReactNode {
                     })}
                 </div>
 
-                <div className="mt-12 border-t border-muted-foreground pt-6 lg:mt-16">
+                <div className="mt-9 border-t border-muted-foreground pt-6 lg:mt-16">
                     <p className="text-center text-caption text-on-dark-muted lg:text-left">
                         {footer.copyright}
                     </p>

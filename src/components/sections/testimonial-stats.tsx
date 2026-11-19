@@ -15,7 +15,7 @@ import { stats } from "@/content/stats";
 export function TestimonialStats(): ReactNode {
     return (
         <section aria-label={testimonial.sectionLabel} className="bg-background">
-            <Container className="grid items-center gap-12 py-section lg:grid-cols-[minmax(0,37.5rem)_25rem] lg:justify-between">
+            <Container className="grid items-center gap-15 py-section lg:grid-cols-[minmax(0,37.5rem)_25rem] lg:justify-between lg:gap-12">
                 <Reveal>
                     <figure>
                         <Image src="/icons/quote.svg" alt="" width={24} height={22} />
@@ -43,14 +43,16 @@ export function TestimonialStats(): ReactNode {
                     </figure>
                 </Reveal>
 
+                {/* Three gapless columns as in the mobile frame; under 384 px the h1-sized values no
+                    longer fit their column, so they step down to the h2 size. */}
                 <Reveal delay={0.1}>
-                    <dl className="grid grid-cols-3 gap-5 lg:grid-cols-1 lg:border-l lg:border-border lg:pl-12">
+                    <dl className="grid grid-cols-3 lg:grid-cols-1 lg:gap-4.25 lg:border-l lg:border-border lg:pl-12">
                         {stats.map((stat) => (
-                            <div key={stat.label} className="flex flex-col-reverse">
+                            <div key={stat.label} className="flex flex-col-reverse justify-end">
                                 <dt className="mt-1 text-body text-subtle-foreground">
                                     {stat.label}
                                 </dt>
-                                <dd className="font-display text-h1 text-primary">
+                                <dd className="font-display text-h1 text-primary max-[24rem]:text-h2">
                                     <CountUp value={stat.value} />
                                 </dd>
                             </div>

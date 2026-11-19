@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ export function People(): ReactNode {
             aria-labelledby="people-title"
             className="overflow-hidden bg-muted"
         >
-            <Container className="grid items-center gap-6 py-section lg:grid-cols-2 lg:gap-15">
+            <Container className="grid items-center gap-8 py-section lg:grid-cols-2 lg:gap-15">
                 <Reveal className="flex flex-col items-start">
                     <SectionHeading
                         titleId="people-title"
@@ -40,14 +40,15 @@ export function People(): ReactNode {
                         title={people.title}
                         description={people.description}
                     />
-                    <Button asChild variant="outline" className="mt-8">
+                    <Button asChild variant="outline" className="mt-6 lg:mt-8">
                         <a href={people.cta.href}>{people.cta.label}</a>
                     </Button>
                 </Reveal>
 
                 <Reveal
                     delay={0.1}
-                    className="@container mx-auto w-full max-w-132.5 [--collage-y:0.9] lg:[--collage-y:1]"
+                    // 520 px wide like the design (not the full 530 px column), left-aligned on desktop.
+                    className="@container mx-auto w-full max-w-130 [--collage-y:0.9] lg:mx-0 lg:[--collage-y:1]"
                 >
                     <div
                         role="group"
@@ -65,10 +66,18 @@ export function People(): ReactNode {
                                 // Static, never reordered: the index is a stable key.
                                 key={index}
                                 className={cn(
-                                    "relative flex flex-col",
+                                    "relative flex flex-col pt-(--offset-mobile) lg:pt-(--offset)",
                                     column.align === "end" ? "items-end" : "items-start",
                                 )}
-                                style={{ gap: cqy(12.84), paddingTop: cqy(column.offset) }}
+                                style={
+                                    {
+                                        gap: cqy(12.84),
+                                        "--offset": cqy(column.offset),
+                                        "--offset-mobile": cqy(
+                                            column.mobileOffset ?? column.offset,
+                                        ),
+                                    } as CSSProperties
+                                }
                             >
                                 {column.images.map((image) => (
                                     <CollagePhoto key={image.src} image={image} />
