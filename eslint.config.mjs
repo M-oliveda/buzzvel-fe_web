@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
         // Generated test reports: linting them fails the zero-warning gate after a local test run.
         "coverage/**",
         "playwright-report/**",
+        ".lighthouseci/**",
         "test-results/**",
     ]),
     {

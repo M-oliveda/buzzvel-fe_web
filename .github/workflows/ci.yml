@@ -113,6 +113,39 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  lighthouse:
+    name: Lighthouse (mobile, production build)
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Clean build on purpose (no .next/cache): a restored Turbopack cache can serve stale CSS.
+      - run: npm run build
+
+      # lighthouserc.json starts the server as production (robots.txt allows crawling, as SEO
+      # expects) and runs 3 times. Accessibility, Best Practices, SEO and CLS fail the job;
+      # Performance, LCP and TBT only warn (MASTERPLAN §11.4, owner decision).
+      - name: Lighthouse CI
+        run: npm run lighthouse
+
+      - name: Upload Lighthouse reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse
+          path: .lighthouseci/
+          retention-days: 14
+          if-no-files-found: ignore
+
   docker:
     name: Docker images build and smoke test
     needs: quality
@@ -147,7 +180,7 @@ jobs:
     name: CI passed
     # Single, stable check name for branch protection, whatever jobs are added later.
     if: ${{ !cancelled() }}
-    needs: [quality, audit, e2e, docker]
+    needs: [quality, audit, e2e, lighthouse, docker]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

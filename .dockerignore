@@ -33,6 +33,7 @@ tests
 coverage
 playwright-report
 test-results
+.lighthouseci
 
 # Confidential design material, infrastructure and dev-only scripts
 design
