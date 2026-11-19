@@ -50,6 +50,9 @@ jobs:
       environment: production
       service: buzzvel-fe-prod
       gated: false
+      # 1 during the evaluation window (Nov 20 to Dec 4, MASTERPLAN §9), then reviewed for cost.
+      min_instances: 1
+      max_instances: 3
       site_url: https://buzzvel-fe.moliveda.dev
     secrets: inherit
 

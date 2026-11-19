@@ -20,4 +20,6 @@ jobs:
       environment: ${{ github.ref_name == 'develop' && 'develop' || 'staging' }}
       service: ${{ github.ref_name == 'develop' && 'buzzvel-fe-develop' || 'buzzvel-fe-staging' }}
       gated: true
+      min_instances: 0
+      max_instances: 2
     secrets: inherit
