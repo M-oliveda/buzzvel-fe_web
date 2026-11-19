@@ -31,6 +31,20 @@ function Trap({ active, withInitialFocus = false }: TrapProps): ReactNode {
     );
 }
 
+function EmptyTrap(): ReactNode {
+    const container = useRef<HTMLDivElement>(null);
+    useFocusTrap(container, true);
+
+    return (
+        <>
+            <button type="button">Outside</button>
+            <div ref={container}>
+                <p>Nothing to focus</p>
+            </div>
+        </>
+    );
+}
+
 describe("getFocusable", () => {
     it("skips disabled controls and hidden subtrees", () => {
         render(<Trap active={false} />);
@@ -86,6 +100,32 @@ describe("useFocusTrap", () => {
         screen.getByRole("button", { name: "Outside" }).focus();
         await user.tab();
         expect(screen.getByRole("button", { name: "Toggle" })).toHaveFocus();
+    });
+
+    it("moves focus that escaped the container to the last element on Shift+Tab", async () => {
+        const user = userEvent.setup();
+        render(<Trap active />);
+
+        screen.getByRole("button", { name: "Outside" }).focus();
+        await user.tab({ shift: true });
+        expect(screen.getByRole("link", { name: "Two" })).toHaveFocus();
+    });
+
+    it("leaves Tab between inner elements to the browser", async () => {
+        const user = userEvent.setup();
+        render(<Trap active />);
+
+        screen.getByRole("link", { name: "One" }).focus();
+        await user.tab();
+        expect(screen.getByRole("link", { name: "Two" })).toHaveFocus();
+    });
+
+    it("leaves Tab alone when the container has nothing focusable", async () => {
+        const user = userEvent.setup();
+        render(<EmptyTrap />);
+
+        await user.tab();
+        expect(screen.getByRole("button", { name: "Outside" })).toHaveFocus();
     });
 
     it("stops trapping once deactivated", async () => {
