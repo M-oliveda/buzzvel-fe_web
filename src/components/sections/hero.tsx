@@ -72,14 +72,14 @@ function HeroVisual(): ReactNode {
                 />
             </div>
 
-            <div className="absolute top-1.5 -left-2 flex items-center gap-3 rounded-lg bg-background px-4 py-3 shadow-float sm:top-4 sm:-left-5.5">
+            <div className="absolute top-1.5 -left-2 flex items-center gap-3 rounded-lg bg-background px-4 py-3 shadow-float motion-safe:animate-float sm:top-4 sm:-left-5.5">
                 <span className="flex h-8 items-center rounded-md bg-secondary px-1 text-body font-bold text-primary">
                     {hero.coursesChip.value}
                 </span>
                 <span className="text-body text-foreground">{hero.coursesChip.label}</span>
             </div>
 
-            <div className="absolute -right-4.5 bottom-9 flex items-center gap-2 rounded-lg bg-background px-4 py-3 shadow-float sm:-right-14">
+            <div className="absolute -right-4.5 bottom-9 flex items-center gap-2 rounded-lg bg-background px-4 py-3 shadow-float motion-safe:animate-float-offset sm:-right-14">
                 <span aria-hidden="true" className="flex gap-0.5">
                     {Array.from({ length: hero.ratingChip.stars }, (_, index) => (
                         <Image key={index} src="/icons/star.svg" alt="" width={14} height={14} />

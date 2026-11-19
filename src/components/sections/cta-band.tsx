@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/motion/reveal";
 import { AvatarStack } from "@/components/ui/avatar-stack";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -52,7 +53,7 @@ export function CtaBand(): ReactNode {
                 ))}
             </div>
 
-            <div className="relative mx-auto flex max-w-180 flex-col items-center px-gutter py-section text-center sm:px-8">
+            <Reveal className="relative mx-auto flex max-w-180 flex-col items-center px-gutter py-section text-center sm:px-8">
                 <AvatarStack avatars={cta.avatars} size="md" ring="accent" />
                 <SectionHeading
                     titleId="cta-title"
@@ -70,7 +71,7 @@ export function CtaBand(): ReactNode {
                         <a href={cta.secondary.href}>{cta.secondary.label}</a>
                     </Button>
                 </div>
-            </div>
+            </Reveal>
         </section>
     );
 }

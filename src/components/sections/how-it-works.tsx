@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/ui/container";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -15,12 +16,14 @@ export function HowItWorks(): ReactNode {
             className="bg-muted"
         >
             <Container className="py-section">
-                <SectionHeading
-                    titleId="how-it-works-title"
-                    align="center"
-                    eyebrow={steps.eyebrow}
-                    title={steps.title}
-                />
+                <Reveal>
+                    <SectionHeading
+                        titleId="how-it-works-title"
+                        align="center"
+                        eyebrow={steps.eyebrow}
+                        title={steps.title}
+                    />
+                </Reveal>
 
                 {/*
                  * --steps-gap drives both the column gap and where the connecting line stops: it
@@ -29,17 +32,21 @@ export function HowItWorks(): ReactNode {
                  * a 46 px vertical line above tiles two and three (mobile frame).
                  */}
                 <ol className="relative mt-11 grid gap-21 [--steps-gap:2.5rem] md:mt-20 md:grid-cols-3 md:gap-(--steps-gap) md:py-7 md:before:absolute md:before:top-14 md:before:left-13 md:before:h-px md:before:w-[calc(100%-(100%-2*var(--steps-gap))/3-2.4375rem)] md:before:bg-border md:before:content-[''] lg:[--steps-gap:5rem]">
-                    {steps.items.map((step) => (
+                    {steps.items.map((step, index) => (
                         <li
                             key={step.label}
                             className="relative flex flex-col items-start max-md:not-first:before:absolute max-md:not-first:before:-top-11.5 max-md:not-first:before:left-7 max-md:not-first:before:h-11.5 max-md:not-first:before:w-px max-md:not-first:before:bg-border max-md:not-first:before:content-['']"
                         >
-                            <StepTile icon={step.icon} />
-                            <Eyebrow className="mt-6 text-muted-foreground">{step.label}</Eyebrow>
-                            <h3 className="mt-2 text-h5">{step.title}</h3>
-                            <p className="mt-3 text-subtitle-2 text-muted-foreground">
-                                {step.description}
-                            </p>
+                            <Reveal delay={index * 0.12} className="flex flex-col items-start">
+                                <StepTile icon={step.icon} />
+                                <Eyebrow className="mt-6 text-muted-foreground">
+                                    {step.label}
+                                </Eyebrow>
+                                <h3 className="mt-2 text-h5">{step.title}</h3>
+                                <p className="mt-3 text-subtitle-2 text-muted-foreground">
+                                    {step.description}
+                                </p>
+                            </Reveal>
                         </li>
                     ))}
                 </ol>
