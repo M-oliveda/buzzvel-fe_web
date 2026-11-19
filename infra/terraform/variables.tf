@@ -65,3 +65,9 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "domain_name" {
+  description = "Custom domain mapped to the service, or null for none (production only)."
+  type        = string
+  default     = null
+}

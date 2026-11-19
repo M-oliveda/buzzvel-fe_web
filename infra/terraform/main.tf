@@ -39,3 +39,14 @@ module "cloud_run_service" {
   deletion_protection   = var.deletion_protection
   labels                = local.labels
 }
+
+module "domain" {
+  source = "./modules/domain"
+  count  = var.create_service && var.domain_name != null ? 1 : 0
+
+  project_id   = var.project_id
+  region       = var.region
+  domain_name  = var.domain_name
+  service_name = module.cloud_run_service[0].name
+  labels       = local.labels
+}

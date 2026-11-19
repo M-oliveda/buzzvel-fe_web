@@ -5,3 +5,4 @@ service_name = "buzzvel-fe-prod"
 min_instances       = 0
 max_instances       = 3
 deletion_protection = true
+domain_name         = "buzzvel-fe.moliveda.dev"
