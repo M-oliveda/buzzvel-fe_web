@@ -612,13 +612,40 @@ stack is out of scope for a single static page.
 
 ### Phase 5 — Pixel-perfect pass, tests and performance
 
-- [ ] Ingest I5 hi-res frames; run `compare-design.ts` per section; fix deltas.
-- [ ] Reach and hold ≥ 80 % coverage; write remaining unit/integration tests; Playwright e2e suite
+- [x] Ingest I5 hi-res frames; run `compare-design.ts` per section; fix deltas.
+  - Done (2026-11-19): desktop (2560 px) and mobile (804 px) frames in `design/`, section offsets
+    measured from the frames into `design/sections.json` (Figma MCP was rate-limited);
+    `npm run design:compare` writes page, design, diff and overlay images per section. Fixed: people
+    collage at its 520 px design width (it filled the 530 px column), mobile CTA spacing and column
+    offset; featured course columns 538/522; mobile hero top padding (52 px) and chip; mobile card
+    padding (24 px); mobile step spacing; stats top-aligned in three gapless columns (smaller values
+    under 384 px so they never overlap) and 17 px apart on desktop; mobile footer gaps. Mismatch 6.8
+    % → 3.6 % desktop and 15.5 % → 6.9 % mobile; page height +25.5 → +9.5 px and +67 → +12 px.
+    Accepted differences in README Testing → Results.
+- [x] Reach and hold ≥ 80 % coverage; write remaining unit/integration tests; Playwright e2e suite
       (desktop + mobile projects).
+  - Done (2026-11-19): 213 unit and integration tests, coverage 99.7 % statements and 98.5 %
+    branches (`use-focus-trap` branches now covered). E2E: 104 pass on five projects. The focus walk
+    caught a footer link scrolled 0.09 px under the viewport edge; fixed with
+    `scroll-padding-bottom` so the whole focus ring stays visible.
 - [ ] Lighthouse CI against the production build; tune LCP image, fonts, JS size.
+  - Done (2026-11-19): `lighthouserc.json` (`@lhci/cli` 0.16.0, mobile, 3 runs, reports to
+    `.lighthouseci/`, never uploaded) and a `lighthouse` CI job in `CI passed`: Accessibility, Best
+    Practices, SEO 100 and CLS ≤ 0.05 fail the job, Performance, LCP and TBT warn (owner decision).
+    Local result: 100/100/100, Performance 92 (91–94), LCP 3.4 s simulated. Three hero-image loading
+    strategies measured over 5 runs each scored the same; the miss comes from the route JS (277 kB,
+    kept by owner decision) and is in README Known gaps.
+  - Open: a green run of the new job on GitHub.
 - [ ] Cross-check in real browsers (Chrome, Safari/WebKit via Playwright, Firefox) and on a real
       phone.
+  - Done (2026-11-19): Playwright projects `firefox`, `webkit` and `mobile-safari` (local only; CI
+    stays on Chromium, owner decision). Keyboard-walk tests are skipped on WebKit (no Tab to links
+    without Full Keyboard Access) and the scoped contact axe scans on Firefox (Playwright page
+    crash); reasons in the specs.
+  - Open (owner): a manual pass in desktop Safari and Firefox and on a real phone.
 - **Exit criteria:** budgets in §1 and §11.4 met, or each miss documented.
+  - Met (2026-11-19): every budget is met except Performance ≥ 95, LCP < 2.5 s and route JS ≤ 130
+    kB, each documented in README Known gaps.
 
 ### Phase 6 — Release, domain and submission
 

@@ -28,10 +28,10 @@ export function HowItWorks(): ReactNode {
                 {/*
                  * --steps-gap drives both the column gap and where the connecting line stops: it
                  * runs from the first tile to just inside the third (left 52 px, ends 13 px into
-                 * column three, as in the desktop frame). On mobile the steps are 84 px apart with
+                 * column three, as in the desktop frame). On mobile the steps are 80 px apart with
                  * a 46 px vertical line above tiles two and three (mobile frame).
                  */}
-                <ol className="relative mt-11 grid gap-21 [--steps-gap:2.5rem] md:mt-20 md:grid-cols-3 md:gap-(--steps-gap) md:py-7 md:before:absolute md:before:top-14 md:before:left-13 md:before:h-px md:before:w-[calc(100%-(100%-2*var(--steps-gap))/3-2.4375rem)] md:before:bg-border md:before:content-[''] lg:[--steps-gap:5rem]">
+                <ol className="relative mt-10 grid gap-20 [--steps-gap:2.5rem] md:mt-20 md:grid-cols-3 md:gap-(--steps-gap) md:py-7 md:before:absolute md:before:top-14 md:before:left-13 md:before:h-px md:before:w-[calc(100%-(100%-2*var(--steps-gap))/3-2.4375rem)] md:before:bg-border md:before:content-[''] lg:[--steps-gap:5rem]">
                     {steps.items.map((step, index) => (
                         <li
                             key={step.label}

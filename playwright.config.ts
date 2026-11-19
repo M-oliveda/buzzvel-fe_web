@@ -23,6 +23,20 @@ export default defineConfig({
             name: "mobile",
             use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
         },
+        // Cross-browser projects run locally only; CI stays on the two Chromium projects above
+        // (`--project` in ci.yml). Install once: `npx playwright install firefox webkit`.
+        {
+            name: "firefox",
+            use: { ...devices["Desktop Firefox"], viewport: { width: 1440, height: 900 } },
+        },
+        {
+            name: "webkit",
+            use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 } },
+        },
+        {
+            name: "mobile-safari",
+            use: { ...devices["iPhone 15"], viewport: { width: 390, height: 844 } },
+        },
     ],
     webServer: {
         command: `npm run build && npm start -- -p ${PORT}`,

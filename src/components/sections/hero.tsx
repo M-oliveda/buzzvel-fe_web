@@ -11,7 +11,7 @@ import { hero } from "@/content/home";
 export function Hero(): ReactNode {
     return (
         <section aria-labelledby="hero-title" className="overflow-hidden bg-muted">
-            <Container className="grid items-start gap-12 py-section lg:grid-cols-2 lg:gap-15 xl:grid-cols-[1fr_31.25rem]">
+            <Container className="grid items-start gap-12 pt-13 pb-section sm:pt-section lg:grid-cols-2 lg:gap-15 xl:grid-cols-[1fr_31.25rem]">
                 <div className="flex flex-col items-start">
                     <Eyebrow>{hero.eyebrow}</Eyebrow>
                     <h1 id="hero-title" className="mt-4 max-w-140 text-h1">
@@ -50,6 +50,7 @@ export function Hero(): ReactNode {
 function HeroVisual(): ReactNode {
     return (
         // Mobile frame: photo above the copy, 346 × 380 (8 px inside the gutter); 500 × 520 from sm.
+        // The section starts 52 px above it there (not the 60 px section padding).
         <div className="relative order-first mx-auto aspect-[346/380] w-[calc(100%-1rem)] sm:aspect-[500/520] sm:w-full sm:max-w-125 lg:order-none lg:mx-0">
             {/* Decorative shapes behind the photo (peach bar, blue disc). */}
             <div
@@ -72,7 +73,7 @@ function HeroVisual(): ReactNode {
                 />
             </div>
 
-            <div className="absolute top-1.5 -left-2 flex items-center gap-3 rounded-lg bg-background px-4 py-3 shadow-float motion-safe:animate-float sm:top-4 sm:-left-5.5">
+            <div className="absolute top-3.5 -left-2 flex items-center gap-3 rounded-lg bg-background px-4 py-3 shadow-float motion-safe:animate-float sm:top-4 sm:-left-5.5">
                 <span className="flex h-8 items-center rounded-md bg-secondary px-1 text-body font-bold text-primary">
                     {hero.coursesChip.value}
                 </span>

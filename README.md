@@ -98,7 +98,7 @@ buzzvel-fe_web/
 │   ├── lib/              # cn, env (Zod-validated), logger, rate-limit, contact-client
 │   ├── schemas/          # contact.schema.ts
 │   └── types/
-├── tests/e2e/            # Playwright specs (smoke, a11y, contact, menu)
+├── tests/e2e/            # Playwright specs (smoke, a11y, contact, menu, motion)
 ├── scripts/              # compare-design.ts (overlay/diff helper, dev only)
 ├── Dockerfile · docker-compose.yaml
 └── .env.example · AGENTS.md · CLAUDE.md · MASTERPLAN.md · README.md · LICENSE
@@ -135,18 +135,20 @@ npm start                # http://localhost:3000
 
 ## Scripts
 
-| Script                 | What it does                                     |
-| ---------------------- | ------------------------------------------------ |
-| `npm run dev`          | Start the dev server                             |
-| `npm run build`        | Production build                                 |
-| `npm start`            | Serve the production build                       |
-| `npm run lint`         | ESLint                                           |
-| `npm run format`       | Prettier (write)                                 |
-| `npm run format:check` | Prettier (check only, used in CI)                |
-| `npm run typecheck`    | `tsc --noEmit`                                   |
-| `npm test`             | Unit and integration tests (Vitest)              |
-| `npm run test:cov`     | Same, with the 80 % coverage gate                |
-| `npm run test:e2e`     | Playwright end-to-end tests (desktop and mobile) |
+| Script                   | What it does                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `npm run dev`            | Start the dev server                                                                                     |
+| `npm run build`          | Production build                                                                                         |
+| `npm start`              | Serve the production build                                                                               |
+| `npm run lint`           | ESLint                                                                                                   |
+| `npm run format`         | Prettier (write)                                                                                         |
+| `npm run format:check`   | Prettier (check only, used in CI)                                                                        |
+| `npm run typecheck`      | `tsc --noEmit`                                                                                           |
+| `npm test`               | Unit and integration tests (Vitest)                                                                      |
+| `npm run test:cov`       | Same, with the 80 % coverage gate                                                                        |
+| `npm run test:e2e`       | Playwright end-to-end tests: Chromium desktop and mobile, plus Firefox, WebKit and mobile Safari locally |
+| `npm run lighthouse`     | Lighthouse CI on the production build (mobile, 3 runs); run `npm run build` first                        |
+| `npm run design:compare` | Pixel diff against the git-ignored design frames; needs a production server on :3100                     |
 
 Husky hooks:
 
@@ -466,12 +468,40 @@ the surface behind it, and is not hidden under the sticky header.
 Best Practices 100, SEO 100; LCP < 2.5 s, CLS < 0.05, TBT < 200 ms; route JavaScript aiming for ≤
 130 kB gzip.
 
-**Pixel-perfect workflow:** `scripts/compare-design.ts` takes Playwright screenshots at the design
-widths and produces an overlay and diff image against the (git-ignored) design frames. Any accepted
-differences are recorded in the pull-request description.
+**Cross-browser checks:** `npm run test:e2e` runs every spec on Chromium (desktop 1440 px and mobile
+390 px), Firefox and WebKit (desktop) and mobile Safari (WebKit, 390 px). CI runs the two Chromium
+projects only; the other three run locally (`npx playwright install firefox webkit` once). Three
+keyboard-walk tests are skipped on WebKit, which, like Safari, leaves links and buttons out of the
+Tab order unless macOS Full Keyboard Access is on. On Firefox, the contact form's scoped axe scans
+are skipped: Playwright's Firefox crashes the page inside them (not reproducible outside the test
+runner); the whole-page axe scan still runs on Firefox. Each skip states its reason in the spec.
 
-_Results (coverage percentage, Lighthouse scores and screenshot): to be completed before
-submission._
+**Pixel-perfect workflow:** `npm run design:compare` screenshots a running production build at the
+two frame widths (402 and 1280 px, at 2×, reduced motion so everything is revealed) and writes page,
+design, diff and 50 % overlay images, for the whole page and for each of the ten sections, to
+`design/diff/`. Section offsets in the frames are read from `design/sections.json`; both stay in the
+git-ignored `design/` folder. It prints the mismatch and the height difference per section, so the
+largest deltas are fixed first.
+
+### Results
+
+Measured on 2026-11-19 on the production build.
+
+| Check                          | Result                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Unit and integration (Vitest)  | 213 tests pass; coverage 99.7 % statements, 98.5 % branches, 100 % functions, 100 % lines                  |
+| End to end (Playwright)        | 104 pass, 16 skipped by design (menu tests on desktop projects, the WebKit and Firefox skips above)        |
+| Lighthouse, mobile (3 runs)    | Accessibility 100, Best Practices 100, SEO 100, Performance 92 (91–94 over 15 runs); CLS 0, TBT 10–20 ms   |
+| Largest Contentful Paint       | 3.4 s simulated (target 2.5 s); about 0.1 s observed on the local run (see [Known gaps](#known-gaps))      |
+| Design diff, desktop (1280 px) | 3.6 % of pixels differ; page 5701 px tall against 5691.5 px; every section within 4 px of its frame height |
+| Design diff, mobile (402 px)   | 6.9 % of pixels differ; page 7811 px tall against 7799 px; every section within 9 px of its frame height   |
+
+Most of the remaining pixel difference is anti-aliasing and sub-pixel text positioning, which the
+diff counts in full. Differences kept on purpose: the desktop copy and colours on mobile and the
+contrast fixes (see [Key decisions](#key-decisions) and [Known gaps](#known-gaps)), the
+featured-course image a few pixels shorter on mobile, and the people collage, whose photos sit up to
+about 8 px from their place in the mobile frame because that frame is not a uniform scale of the
+desktop one.
 
 ## Security and observability
 
@@ -618,9 +648,20 @@ _To be completed before submission. Current candidates:_
   the primary text colour and a paler step 2 tile. The desktop wording and colours are used on every
   breakpoint so the page reads the same everywhere.
 - Input placeholders use the design's tertiary text colour (4.45:1 on the cream input background).
-- `npm audit` reports a high-severity ReDoS advisory in `picomatch`, pulled in only by dev tooling
-  (ESLint, Vitest, lint-staged) and with no patched release yet. The production dependency tree
-  (`npm audit --omit=dev`) has no known vulnerabilities.
+- Lighthouse mobile Performance is 91–94 (median 92) against the 95 target, and the simulated
+  Largest Contentful Paint is about 3.4 s against 2.5 s; CI reports both as warnings. The hero image
+  is 22 kB and arrives early (observed LCP is about 0.1 s locally), but Lighthouse's simulated 1.6
+  Mbps connection also counts the JavaScript and fonts requested before that paint, so the cause is
+  the route JavaScript above. Three ways of loading the hero image (`preload`,
+  `fetchPriority="high"` with and without `preload`, `loading="eager"`) were measured over five runs
+  each and scored the same, so the original `preload` was kept.
+- `npm audit` reports high-severity advisories only in dev tooling, with no patched release yet: a
+  ReDoS in `picomatch` (ESLint, Vitest, lint-staged) and denial-of-service issues in `basic-ftp`,
+  reached through `@lhci/cli`'s proxy support, which this project never uses for FTP. The production
+  dependency tree (`npm audit --omit=dev`) has no known vulnerabilities.
+- A local `next build` can reuse stale CSS from Turbopack's persistent cache (`.next/cache`) after a
+  `globals.css` edit; delete `.next/cache/turbopack` if a style change does not show. Docker images
+  and the CI Lighthouse job always build without that cache.
 
 ## Time spent
 
