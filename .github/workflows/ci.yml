@@ -219,3 +219,40 @@ jobs:
           for result in ${RESULTS}; do
             [ "${result}" = "success" ] || exit 1
           done
+
+  # Deploys run only after `CI passed`. They are reusable workflows called from here rather than
+  # `workflow_run` triggers, which only fire for workflow files on the default branch (`main`).
+  deploy-preview:
+    name: Deploy preview
+    needs: ci
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'develop' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/deploy-preview.yml
+    secrets: inherit
+
+  deploy-env:
+    name: Deploy develop or staging
+    needs: ci
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/'))
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-env.yml
+    secrets: inherit
+
+  deploy-prod:
+    name: Deploy production
+    needs: ci
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+      id-token: write
+    uses: ./.github/workflows/deploy-prod.yml
+    secrets: inherit
