@@ -6,9 +6,11 @@ mobile, tablet and desktop, implemented from the supplied Figma design with **Ne
 TypeScript and Tailwind CSS**, with typed reusable components, accessible semantics,
 reduced-motion-safe animation and local mock data.
 
-Around the page I also built a production-style delivery setup: Docker, GitHub Actions, Terraform
-and Google Cloud Run, with five environments. The challenge only asks for the page, so the
-infrastructure is deliberately kept small and documented.
+Around the page I also built a production-style delivery setup: Docker, GitHub Actions and Google
+Cloud Run, with five environments, set up with the `gcloud` CLI. The repository also contains a
+Terraform description of the same infrastructure, written to demonstrate Terraform and never applied
+(see [Terraform](#terraform)). The challenge only asks for the page, so the infrastructure is
+deliberately kept small and documented.
 
 > **Status:** released (`v1.0.0`). The full execution plan (scope, architecture, phases and quality
 > gates) is in [`MASTERPLAN.md`](./MASTERPLAN.md).
@@ -38,11 +40,13 @@ infrastructure is deliberately kept small and documented.
     - [Health checks](#health-checks)
     - [Releasing](#releasing)
     - [Rollback](#rollback)
-  - [Terraform](#terraform)
-    - [What Terraform manages](#what-terraform-manages)
-    - [Layout](#layout)
+  - [Cloud setup (gcloud)](#cloud-setup-gcloud)
     - [Prerequisites](#prerequisites)
     - [Usage](#usage)
+  - [Terraform](#terraform)
+    - [What the configuration describes](#what-the-configuration-describes)
+    - [Layout](#layout)
+    - [How it would be applied](#how-it-would-be-applied)
   - [Environment variables](#environment-variables)
   - [Testing and quality](#testing-and-quality)
   - [Security and observability](#security-and-observability)
@@ -70,7 +74,7 @@ infrastructure is deliberately kept small and documented.
 | Tests         | Vitest, React Testing Library, MSW, Playwright, `@axe-core/playwright` (≥ 80 % coverage gate)                                                                      |
 | Containers    | Docker (single multi-stage `Dockerfile`), Docker Compose (local only), unprivileged NGINX (basic-auth `gate` target)                                               |
 | Cloud         | Google Cloud Run, Artifact Registry                                                                                                                                |
-| IaC and CI/CD | Terraform (remote state in GCS), GitHub Actions (Workload Identity Federation, no stored keys)                                                                     |
+| IaC and CI/CD | `gcloud` setup script, GitHub Actions (Workload Identity Federation, no stored keys); Terraform as a reference only, never applied                                 |
 | Secrets       | GitHub Secrets (environment-scoped), injected at deploy time. Google Secret Manager is not used                                                                    |
 
 ## Project structure
@@ -82,7 +86,7 @@ buzzvel-fe_web/
 ├── .husky/               # pre-commit · commit-msg · pre-push
 ├── docker/nginx/         # nginx.conf.template · entrypoint.sh (basic-auth gate)
 ├── docs/                 # Lighthouse screenshot
-├── infra/terraform/      # bootstrap · modules · envs
+├── infra/terraform/      # bootstrap · modules · envs (reference only, never applied)
 ├── public/               # images (AVIF/WebP + fallbacks), favicon, og image
 ├── src/
 │   ├── app/              # layout, page, globals.css, robots, sitemap, health, ready, api/v1/contact
@@ -264,9 +268,9 @@ deployer service account. This repository is allowed to impersonate each deploye
 1. **`ci.yml`** (every push and PR): `npm ci`, `format:check`, `lint`, `typecheck`, unit and
    integration tests with the 80 % coverage gate, a production dependency audit, `next build` with
    Playwright e2e against it, Lighthouse CI, both Docker images built and smoke-tested, and
-   `terraform fmt -check` plus `terraform validate` on every run. Coverage, the Playwright report
-   and the Lighthouse reports are uploaded as artifacts. All of them feed one required check,
-   `CI passed`.
+   `terraform fmt -check` on every run (formatting only, see [Terraform](#terraform)). Coverage, the
+   Playwright report and the Lighthouse reports are uploaded as artifacts. All of them feed one
+   required check, `CI passed`.
 2. **Deploy, only after `CI passed`:** `ci.yml` calls the deploy workflows as reusable workflows. (A
    `workflow_run` trigger would only fire for workflow files already on `main`.)
    - `deploy-preview.yml`: pull requests into `develop` from this repository (never forks). Deploys
@@ -281,9 +285,10 @@ deployer service account. This repository is allowed to impersonate each deploye
 3. **`build-push-deploy.yml`** (reusable, used by all of the above): authenticates through WIF,
    builds `app` (with that environment's `APP_ENV` and `NEXT_PUBLIC_SITE_URL`) and, when gated,
    `gate`, pushes both to the project's Artifact Registry tagged with the commit SHA (BuildKit layer
-   cache), and runs `gcloud run deploy`. Gated services get two containers: `gate` on `:8080`
-   (ingress) depends on `app`, which must answer `/health` on `:3000` before the instance takes
-   traffic.
+   cache), and runs `gcloud run deploy`, which creates the service on its first run and sets its
+   runtime service account, scaling, labels and public access on every run. Gated services get two
+   containers: `gate` on `:8080` (ingress) depends on `app`, which must answer `/health` on `:3000`
+   before the instance takes traffic.
 4. **Post-deploy smoke:** `/health` and `/ready` return 200. On gated environments `/` returns 401
    without credentials and 200 with them, and carries `X-Robots-Tag`. In production `/` returns 200.
 
@@ -312,7 +317,7 @@ GitHub Environment secrets BASIC_AUTH_USERNAME + BASIC_AUTH_PASSWORD
 Trade-off: the username and password end up as Cloud Run environment variables, visible to anyone
 with `run.services.get` on the project. This is acceptable because they only protect non-production
 previews that serve mock data, the password is unique to this project (never reuse one), and the
-values are never stored in Terraform state or Git. Production has no gate and no such secrets.
+values are never stored in Git. Production has no gate and no such secrets.
 
 Set the secrets once per protected environment:
 
@@ -359,49 +364,40 @@ gcloud run services update-traffic buzzvel-fe-prod --to-revisions <previous-revi
 Then ship the fix as a patch release and, once it is live, return traffic to the newest revision
 with `gcloud run services update-traffic buzzvel-fe-prod --to-latest` (same project and region).
 
-## Terraform
+## Cloud setup (gcloud)
 
-Persistent infrastructure is described as code in [`infra/terraform`](./infra/terraform). Ephemeral
-**preview** services are created and removed by the pull-request workflows, not by Terraform.
+Deploys use the `gcloud` CLI from GitHub Actions. The few resources they need are created once per
+project with [`scripts/gcp-setup.sh`](./scripts/gcp-setup.sh), which I run from my machine. It is
+idempotent, so re-running it is safe:
 
-### What Terraform manages
+- Enables the Cloud Run, Artifact Registry and IAM Credentials APIs (Secret Manager and Cloud Build
+  are not required).
+- Creates the `buzzvel-fe` Artifact Registry Docker repository and applies its cleanup policies
+  ([`scripts/gcp/cleanup-policies.json`](./scripts/gcp/cleanup-policies.json)): keep the 10 most
+  recent versions; delete untagged and `pr-*` images after 7 days and anything after 30 days.
+- Creates the `buzzvel-fe-runtime` service account the revisions run as. It has no project roles:
+  the app calls no Google APIs.
+- Production only: maps `buzzvel-fe.moliveda.dev` to `buzzvel-fe-prod` (Cloud Run domain mapping,
+  available in `us-central1`, so no load balancer is needed) and prints the DNS records to add at
+  the registrar. Google issues and renews the certificate. The mapping needs the service, so run the
+  script again after the first production deploy.
 
-- Artifact Registry Docker repository (`buzzvel-fe`)
-- The runtime service account
-- Cloud Run services for `develop`, `staging` and `production` (production without the gate
-  container)
-- The custom domain for production (`buzzvel-fe.moliveda.dev`): a Cloud Run domain mapping, which is
-  available in `us-central1`, so no load balancer is needed. Google issues and renews the
-  certificate. The `moliveda.dev` zone is hosted at the registrar, not in Cloud DNS, so the records
-  from the `domain_dns_records` output are added there by hand.
+Cloud Run services are not created by the script: the first `gcloud run deploy` of each environment
+creates its service, and every deploy sets the image, environment variables, the gate sidecar,
+scaling (`develop` and `staging` 0–2, `production` 1–3, previews 0–1), labels and public access.
 
-The Workload Identity pool, provider and deployer service accounts are shared by the owner's other
-repositories, so Terraform does not manage them. This repository's binding to them is set up once by
-hand (see [Prerequisites](#prerequisites)).
-
-CI deploys new image revisions. Terraform ignores the containers (images, environment variables, the
-gate sidecar) through `lifecycle.ignore_changes` to prevent drift and so that **secret values never
-reach Terraform state**. Each service starts with a placeholder container named after its ingress
-container (`gate`, or `app` in production), which the first deploy replaces.
-
-### Layout
-
-```text
-infra/terraform/
-├── bootstrap/     # one-time: GCS state bucket, required APIs
-├── modules/       # artifact-registry, cloud-run-service, runtime-sa, domain
-└── envs/          # preview.tfvars, develop.tfvars, staging.tfvars, production.tfvars
-```
+The Workload Identity pool, provider and deployer service accounts are shared by my other
+repositories, so the script does not manage them. This repository's binding to them is set up once
+by hand (see [Prerequisites](#prerequisites)).
 
 ### Prerequisites
 
-- Terraform and the `gcloud` CLI, authenticated (`gcloud auth application-default login`)
+- The `gcloud` CLI, authenticated (`gcloud auth login`), with the `beta` component for the domain
+  mapping
 - The four GCP projects listed in [Environments and deployment](#environments-and-deployment), with
   billing enabled, and the roles needed to create the resources above
-- APIs enabled in each project: Cloud Run, Artifact Registry, IAM Credentials (Secret Manager and
-  Cloud Build are not required)
 - Ownership of the DNS zone for `moliveda.dev`, verified in Search Console by the account that runs
-  Terraform (`gcloud domains verify moliveda.dev`); required by the domain mapping
+  the script (`gcloud domains verify moliveda.dev`); required by the domain mapping
 - GitHub Environments `preview`, `develop`, `staging` and `production` with the variables listed in
   [Environment variables](#environment-variables), and the `BASIC_AUTH_USERNAME` and
   `BASIC_AUTH_PASSWORD` secrets in the three gated ones
@@ -418,6 +414,52 @@ infra/terraform/
 ### Usage
 
 ```bash
+for env in preview develop staging production; do
+  scripts/gcp-setup.sh "$env"
+done
+# After the first production deploy: map the custom domain and print its DNS records
+scripts/gcp-setup.sh production
+```
+
+`GCP_REGION` overrides the region (default `us-central1`).
+
+## Terraform
+
+[`infra/terraform`](./infra/terraform) describes the same infrastructure as code. **It was written
+to demonstrate Terraform and has never been applied to Google Cloud**: the environments are set up
+with [`scripts/gcp-setup.sh`](#cloud-setup-gcloud) and deployed with `gcloud`. CI only checks that
+it is formatted (`terraform fmt -check -recursive`).
+
+### What the configuration describes
+
+- Artifact Registry Docker repository (`buzzvel-fe`) with cleanup policies
+- The runtime service account
+- Cloud Run services for `develop`, `staging` and `production` (production without the gate
+  container), with public access and `deletion_protection` on production
+- The custom domain mapping for production (`buzzvel-fe.moliveda.dev`)
+- A bootstrap configuration for the remote state bucket (GCS) and the required APIs
+
+It is designed to work alongside the deploy workflows: Terraform would ignore the containers
+(images, environment variables, the gate sidecar) through `lifecycle.ignore_changes`, so image
+rollouts would not show up as drift and **secret values would never reach Terraform state**. Each
+service would start with a placeholder container named after its ingress container (`gate`, or `app`
+in production), which the first deploy replaces.
+
+### Layout
+
+```text
+infra/terraform/
+├── bootstrap/     # one-time: GCS state bucket, required APIs
+├── modules/       # artifact-registry, cloud-run-service, runtime-sa, domain
+└── envs/          # preview.tfvars, develop.tfvars, staging.tfvars, production.tfvars
+```
+
+### How it would be applied
+
+Not part of this project's delivery; shown for reference. Applying it to projects already set up
+with the script would need the existing resources imported first.
+
+```bash
 # 1. One-time bootstrap per project (state bucket and APIs): see infra/terraform/bootstrap/README.md
 
 # 2. Per environment (one state per project): <suffix> is prev, dev, stg or prod
@@ -429,10 +471,6 @@ terraform plan  -var-file=envs/<env>.tfvars -out=<env>.tfplan
 terraform apply <env>.tfplan
 terraform output domain_dns_records    # production only: records to add at the registrar
 ```
-
-CI runs `terraform fmt -check` and `terraform validate` on every run. Review every `plan` before
-applying; `terraform destroy` is not wired into any workflow, and the production service has
-`deletion_protection`.
 
 **Variables** (`variables.tf`, set per environment in `envs/<env>.tfvars`):
 
@@ -471,16 +509,16 @@ at start-up if a required value is missing.
 | `BASIC_AUTH_USERNAME`          | Gate     | GitHub Secrets | **Secret.** Gate username injected into NGINX, per protected environment |
 | `BASIC_AUTH_PASSWORD`          | Gate     | GitHub Secrets | **Secret.** Gate password injected into NGINX, per protected environment |
 
-CI and Terraform values are **GitHub Actions variables** (not secrets). Values that differ per
-project are set on each GitHub Environment, so a job sees them only when it declares `environment:`:
+CI values are **GitHub Actions variables** (not secrets). Values that differ per project are set on
+each GitHub Environment, so a job sees them only when it declares `environment:`:
 
-| Variable                         | Scope       | Used by       | Value                                                                                                    |
-| -------------------------------- | ----------- | ------------- | -------------------------------------------------------------------------------------------------------- |
-| `GCP_REGION`                     | Repository  | CI, Terraform | `us-central1`                                                                                            |
-| `ARTIFACT_REGISTRY_REPO`         | Repository  | CI            | `buzzvel-fe`                                                                                             |
-| `GCP_PROJECT_ID`                 | Environment | CI, Terraform | That environment's project, e.g. `moliveda-gcloudprojects-stg`                                           |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Environment | CI            | `projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
-| `GCP_SERVICE_ACCOUNT`            | Environment | CI            | That project's deployer, e.g. `cicd-deployer-stg@moliveda-gcloudprojects-stg.iam.gserviceaccount.com`    |
+| Variable                         | Scope       | Used by | Value                                                                                                    |
+| -------------------------------- | ----------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `GCP_REGION`                     | Repository  | CI      | `us-central1`                                                                                            |
+| `ARTIFACT_REGISTRY_REPO`         | Repository  | CI      | `buzzvel-fe`                                                                                             |
+| `GCP_PROJECT_ID`                 | Environment | CI      | That environment's project, e.g. `moliveda-gcloudprojects-stg`                                           |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Environment | CI      | `projects/<project-number>/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
+| `GCP_SERVICE_ACCOUNT`            | Environment | CI      | That project's deployer, e.g. `cicd-deployer-stg@moliveda-gcloudprojects-stg.iam.gserviceaccount.com`    |
 
 ## Testing and quality
 
@@ -558,8 +596,8 @@ desktop one.
   first `X-Forwarded-For` entry; `CONTACT_RATE_LIMIT_MAX` per `CONTACT_RATE_LIMIT_WINDOW_MS`, 429
   with `Retry-After`); NGINX `limit_req` on gated environments.
 - **Containers:** run as non-root.
-- **Secrets:** only in GitHub Secrets (environment-scoped, masked in logs); never in Git, Terraform
-  state or images. `npm audit` and Dependabot are enabled.
+- **Secrets:** only in GitHub Secrets (environment-scoped, masked in logs); never in Git or images.
+  `npm audit` and Dependabot are enabled.
 - **Logging:** `winston` JSON logs to stdout with `service`, `env` and `correlationId`
   (`X-Correlation-ID` accepted when it is 1–128 characters of `A–Z a–z 0–9 . _ -`, otherwise
   generated, and echoed on the response). Message bodies and emails are never logged, only lengths
@@ -672,6 +710,9 @@ desktop one.
   lockfile, but the production image itself is not the one verified on staging.
 - The `vX.Y.Z` tags are created by the production workflow with `GITHUB_TOKEN`, so unlike the
   commits they are not GPG-signed.
+- The production Cloud Run service has no deletion protection: it is created by `gcloud run deploy`,
+  not by Terraform (whose configuration sets `deletion_protection`). No workflow deletes it; only
+  preview services are deleted, by name, when their pull request closes.
 - The custom domain uses Cloud Run domain mapping, which Google still lists as Preview ("not
   production-ready", with possible extra latency). A global external HTTPS load balancer with a
   serverless NEG is the GA alternative, at a fixed monthly cost not justified for this page.
@@ -735,7 +776,7 @@ act, what tools to choose, its style, etc.
   code generation and review.
 - **MCP servers** used from Claude Code: the **Figma MCP server** to read the design (tokens,
   layout, assets) and **Context7** for up-to-date library and cloud documentation (Next.js 16, Cloud
-  Run, GitHub Actions, Terraform providers) instead of relying on the model's memory.
+  Run, `gcloud`, GitHub Actions, Terraform providers) instead of relying on the model's memory.
 
 ### How I verify AI output
 
@@ -747,7 +788,7 @@ act, what tools to choose, its style, etc.
   relying on the model's memory.
 - Visual accuracy is checked by me against the design with an overlay diff, and the page is tested
   by hand on mobile and desktop with keyboard-only navigation.
-- Generated infrastructure is reviewed through `terraform plan` before every apply.
+- Cloud setup commands are read and run by me, never by CI (`scripts/gcp-setup.sh`).
 
 ## Assets and credits
 
