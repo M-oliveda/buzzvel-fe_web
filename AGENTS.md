@@ -202,8 +202,9 @@ src/test/                 test-only helpers: jsdom stubs, MSW server, log captur
 src/instrumentation*.ts   boot-time env validation ....................................... exists
 tests/e2e/                smoke, menu, motion, contact, a11y specs ........................ exists
 docker/nginx/             gate config template + entrypoint .............................. exists
-.github/workflows/        ci.yml exists; deploy-preview, cleanup-preview, deploy-env, release Phase 2
-infra/terraform/          bootstrap/, modules/, envs/ ...................................... Phase 2
+.github/workflows/        ci, build-push-deploy, deploy-env, deploy-preview, cleanup-preview,
+                          deploy-prod (deploys are called from ci.yml after CI passed) ... exists
+infra/terraform/          bootstrap/, modules/ (incl. domain), envs/ ...................... exists
 scripts/compare-design.ts pixel-diff helper ............................................... Phase 5
 design/                   git-ignored Figma frames — confidential, NEVER commit
 ```
