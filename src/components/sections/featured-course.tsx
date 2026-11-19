@@ -14,7 +14,7 @@ export function FeaturedCourse(): ReactNode {
         <section
             id={sectionIds.featured}
             aria-labelledby="featured-course-title"
-            className="bg-primary text-on-dark"
+            className="bg-primary text-on-dark focus-ring-inverse"
         >
             <Container className="grid items-center gap-12 py-section lg:grid-cols-2 lg:gap-15">
                 <div className="relative">

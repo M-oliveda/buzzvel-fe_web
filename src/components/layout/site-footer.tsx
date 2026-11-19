@@ -10,7 +10,7 @@ import { Logo } from "./logo";
 /** Navy footer: brand and tagline, three link columns, copyright. */
 export function SiteFooter(): ReactNode {
     return (
-        <footer className="bg-navy text-on-dark">
+        <footer className="bg-navy text-on-dark focus-ring-inverse">
             <Container className="pt-15 pb-6 lg:pt-20 lg:pb-10">
                 <div className="grid grid-cols-2 gap-x-8 gap-y-10 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-8">
                     <div className="col-span-2 lg:col-span-1">

@@ -190,3 +190,26 @@
         outline-offset: 2px;
     }
 }
+
+/*
+ * Dark surfaces (blue band, navy footer): the blue ring is invisible on blue (1:1) and weak on
+ * navy (3.1:1), so every focus ring inside turns white (5.5:1 and 17:1, WCAG 1.4.11).
+ */
+@utility focus-ring-inverse {
+    --ring: var(--on-dark);
+}
+
+/*
+ * CSS transitions and animations ignore framer-motion's MotionConfig, so reduced motion is
+ * enforced here too (MASTERPLAN §8, Motion). Unlayered on purpose: unlayered rules outrank
+ * Tailwind's `@layer utilities`, so no `!important` is needed.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        transition-duration: 0s;
+        animation-duration: 0s;
+        scroll-behavior: auto;
+    }
+}
