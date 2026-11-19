@@ -93,7 +93,7 @@ RootLayout (fonts, metadata, MotionProvider, skip link)
    PR open/sync ──► CI ──► Artifact Registry ──► Cloud Run  buzzvel-fe-pr-<n>   (gate + app)  preview
    push develop ──► CI ──► Artifact Registry ──► Cloud Run  buzzvel-fe-develop  (gate + app)
    push release/* ► CI ──► Artifact Registry ──► Cloud Run  buzzvel-fe-staging  (gate + app)
-   tag vX.Y.Z   ──► CI ──► rebuild tag      ──► Cloud Run  buzzvel-fe-prod     (app only)
+   push main    ──► CI ──► rebuild commit   ──► Cloud Run  buzzvel-fe-prod     (app only) ──► tag vX.Y.Z
                                                      │
                               buzzvel-fe.moliveda.dev ┘  (production only)
 
@@ -136,7 +136,7 @@ auth so Cloud Run probes work.
 ```text
 buzzvel-fe_web/
 ├── .github/
-│   ├── workflows/            ci.yml · deploy-preview.yml · cleanup-preview.yml · deploy-env.yml · release.yml
+│   ├── workflows/            ci.yml · build-push-deploy.yml · deploy-preview.yml · cleanup-preview.yml · deploy-env.yml · deploy-prod.yml
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── CODEOWNERS
 ├── .husky/                   pre-commit · commit-msg · pre-push
@@ -208,13 +208,13 @@ any confidential material never enter Git.
 
 ## 9. Environments and delivery pipeline
 
-| Environment  | Trigger                     | URL                                | NGINX basic auth            | Notes                                                                                                                 |
-| ------------ | --------------------------- | ---------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `local`      | `docker compose up --build` | `http://localhost:3000`            | Optional (`--profile gate`) | Bind mounts, hot reload                                                                                               |
-| `preview`    | Pull request to `develop`   | `buzzvel-fe-pr-<n>` Cloud Run URL  | Yes                         | Created on PR open/sync, **deleted on PR close**. Same-repo PRs only                                                  |
-| `develop`    | Push to `develop`           | `buzzvel-fe-develop` Cloud Run URL | Yes                         | Latest, unstable                                                                                                      |
-| `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL | Yes                         | Candidate for the next stable release                                                                                 |
-| `production` | Tag `vX.Y.Z` (from `main`)  | `https://buzzvel-fe.moliveda.dev`  | **No**                      | Image rebuilt from the tagged commit. Min instances 1 during the evaluation window (Nov 20 → Dec 4), then review cost |
+| Environment  | Trigger                     | URL                                | NGINX basic auth            | Notes                                                                                                                                                       |
+| ------------ | --------------------------- | ---------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `local`      | `docker compose up --build` | `http://localhost:3000`            | Optional (`--profile gate`) | Bind mounts, hot reload                                                                                                                                     |
+| `preview`    | Pull request to `develop`   | `buzzvel-fe-pr-<n>` Cloud Run URL  | Yes                         | Created on PR open/sync, **deleted on PR close**. Same-repo PRs only                                                                                        |
+| `develop`    | Push to `develop`           | `buzzvel-fe-develop` Cloud Run URL | Yes                         | Latest, unstable                                                                                                                                            |
+| `staging`    | Push to `release/*`         | `buzzvel-fe-staging` Cloud Run URL | Yes                         | Candidate for the next stable release                                                                                                                       |
+| `production` | Push to `main` (merged PR)  | `https://buzzvel-fe.moliveda.dev`  | **No**                      | Image rebuilt from the merged commit, tagged `vX.Y.Z` after the smoke test. Min instances 1 during the evaluation window (Nov 20 → Dec 4), then review cost |
 
 Each deploy job runs in the GitHub Environment of the same name, which supplies that environment's
 GCP project, WIF provider and deployer (§6.2, Appendix A) and, when it is gated, its basic-auth
@@ -233,14 +233,17 @@ secrets.
      PR.
    - `cleanup-preview.yml`: on PR close, deletes the service.
    - `deploy-env.yml`: `develop` and `release/*` deploy to their Cloud Run service.
-   - `release.yml`: on `v*.*.*` tag, verifies the tag is on `main` and that `CI passed` is green for
-     it, rebuilds the tagged commit in the production project, deploys production, runs a smoke
-     check (`/health`, `/`), creates a GitHub Release.
+   - `deploy-prod.yml`: on a push to `main`, after `CI passed`, checks that
+     `v<package.json version>` does not exist yet, rebuilds the commit in the production project,
+     deploys production, runs a smoke check (`/health`, `/`), then creates the tag and the GitHub
+     Release (owner decision 2026-11-19: a tag only ever marks a stable, deployed release).
+   - All deploy workflows are reusable and called from `ci.yml` after `CI passed`
+     (`build-push-deploy.yml` holds the shared build, push, deploy and smoke steps).
 4. **Post-deploy smoke:** `curl` `/health` and assert the home page returns 200 (with basic-auth
    credentials from secrets in protected environments).
 
-Rollback = redeploy the previous revision (`gcloud run services update-traffic`) or tag a patch
-release.
+Rollback = send traffic back to the previous revision (`gcloud run services update-traffic`), then
+ship a patch release through `hotfix/*` → `main`.
 
 ## 10. Design implementation spec
 
@@ -284,7 +287,10 @@ radii, shadows, container width. Until I3 arrives, no styling work starts beyond
 | Preview infrastructure (decided 2026-11-18)         | `envs/preview.tfvars` manages the registry and runtime SA in the prev project; PR workflows create and delete the services.                 |
 | Terraform checks in CI (decided 2026-11-18)         | `fmt -check` and `validate` run on every CI run (not path-filtered) and are part of `CI passed`.                                            |
 | Production min instances (decided 2026-11-18)       | `0` until the evaluation window; raised to `1` in Phase 6.                                                                                  |
-| Production proof (decided 2026-11-18)               | A real throwaway tag `v0.0.1`, created only with the owner's confirmation.                                                                  |
+| Production proof (revised 2026-11-19)               | No throwaway tag. Production deploys on a merge to `main`; `deploy-prod.yml` creates `vX.Y.Z` only after a green deploy and smoke test.     |
+| Production trigger (decided 2026-11-19)             | Merge to `main` deploys, then tags (replaces "tag triggers deploy"). The workflow is `deploy-prod.yml`, not `release.yml`.                  |
+| Custom domain (decided 2026-11-19)                  | Cloud Run domain mapping (available in `us-central1`, Preview); DNS records added by hand at the registrar.                                 |
+| Deferred to Known gaps (decided 2026-11-19)         | NGINX `limit_req` and `scripts/test-gate.sh`.                                                                                               |
 
 ### 10.3.1 UI component library (shadcn-style)
 
@@ -467,7 +473,7 @@ stack is out of scope for a single static page.
     bound to each project's `cicd-deployer-*` service account through WIF.
   - Open: the owner sets the basic-auth secrets in `preview`, `develop` and `staging` (none are set
     yet, checked 2026-11-18); deployment branch/tag rules per environment (`develop` → `develop`,
-    `staging` → `release/*`, `production` → `v*` tags; `preview` unrestricted).
+    `staging` → `release/*`, `production` → `main`; `preview` unrestricted).
 - [ ] Terraform modules: Artifact Registry repo, runtime service account, Cloud Run services for
       `develop`, `staging`, `production` (production without the gate container), one state per
       project. The WIF pool, provider and deployer service accounts already exist (§6.2) and are not
@@ -488,19 +494,27 @@ stack is out of scope for a single static page.
       two GitHub secrets into the gate container on Cloud Run.
   - Done (Phase 1): basic auth, exempt probes, `X-Robots-Tag`, proxy, and the `entrypoint.sh`
     behaviour above.
-  - Open: `limit_req` keyed on the real client IP, `scripts/test-gate.sh` smoke test, injection by
-    the deploy workflow.
+  - Done (2026-11-19): injection by the deploy workflow (`build-push-deploy.yml`, through an
+    env-vars file so the values never appear in a command line).
+  - Deferred (owner decision 2026-11-19): `limit_req` and `scripts/test-gate.sh`, recorded in README
+    Known gaps.
 - [ ] Workflows: build and push, `deploy-preview`, `cleanup-preview`, `deploy-env`, `release`.
       Same-repo guard on preview.
   - Decided (2026-11-18): `release` rebuilds the tagged commit in production instead of promoting
     the staging image (§10.3).
-  - Open: all five workflows (`build-push-deploy.yml` is the reusable "build and push").
+  - Done (2026-11-19): `build-push-deploy.yml` (reusable build, push, deploy, smoke), `deploy-env`,
+    `deploy-preview` (same-repo guard, upserted PR comment), `cleanup-preview` and `deploy-prod`
+    (replaces `release.yml`, §10.3), all called from `ci.yml` after `CI passed`. `actionlint` and
+    Prettier clean.
+  - Open: a first green run of each on GitHub.
 - [ ] Verify: PR → preview URL commented; merge to `develop` → develop service updates;
       unauthenticated request to a gated env returns 401; `/health` returns 200 without auth.
 - [ ] Terraform `fmt`/`validate` in CI.
-  - Open: CI job (runs on every CI run, §10.3). Passes locally today.
+  - Done (2026-11-19): `terraform` job in `ci.yml` (`fmt -check -recursive`, `validate` for the root
+    and `bootstrap/` with `init -backend=false`), part of `CI passed`.
+  - Open: a green run on GitHub.
 - **Exit criteria:** every non-production environment reachable behind basic auth; production path
-  proven with a throwaway tag (`v0.0.1`) or dry run.
+  proven by the first release (`v1.0.0`, §10.3).
 
 ### Phase 3 — Design system and page build
 
@@ -628,14 +642,14 @@ stack is out of scope for a single static page.
     branches (`use-focus-trap` branches now covered). E2E: 104 pass on five projects. The focus walk
     caught a footer link scrolled 0.09 px under the viewport edge; fixed with
     `scroll-padding-bottom` so the whole focus ring stays visible.
-- [ ] Lighthouse CI against the production build; tune LCP image, fonts, JS size.
+- [x] Lighthouse CI against the production build; tune LCP image, fonts, JS size.
   - Done (2026-11-19): `lighthouserc.json` (`@lhci/cli` 0.16.0, mobile, 3 runs, reports to
     `.lighthouseci/`, never uploaded) and a `lighthouse` CI job in `CI passed`: Accessibility, Best
     Practices, SEO 100 and CLS ≤ 0.05 fail the job, Performance, LCP and TBT warn (owner decision).
     Local result: 100/100/100, Performance 92 (91–94), LCP 3.4 s simulated. Three hero-image loading
     strategies measured over 5 runs each scored the same; the miss comes from the route JS (277 kB,
     kept by owner decision) and is in README Known gaps.
-  - Open: a green run of the new job on GitHub.
+  - Done (2026-11-19): green on GitHub in run `44588119696` (`develop`, `76e28ba`).
 - [ ] Cross-check in real browsers (Chrome, Safari/WebKit via Playwright, Firefox) and on a real
       phone.
   - Done (2026-11-19): Playwright projects `firefox`, `webkit` and `mobile-safari` (local only; CI
@@ -649,15 +663,29 @@ stack is out of scope for a single static page.
 
 ### Phase 6 — Release, domain and submission
 
-- [ ] Cut `release/1.0.0` → staging verified → merge to `main` → tag `v1.0.0` → production deploy.
-- [ ] Domain: verify `moliveda.dev`, map `buzzvel-fe.moliveda.dev` (Cloud Run domain mapping if
-      available in the chosen region, otherwise a global external HTTPS load balancer with a
-      serverless NEG and managed certificate, defined in Terraform). Add the DNS records (I2).
-      Confirm HTTPS.
-- [ ] Final `README.md`: install/run/build, key decisions, known gaps, approximate time spent, AI
+- [ ] Cut `release/1.0.0` → staging verified → merge to `main` → production deploy → `v1.0.0` tag
+      created by `deploy-prod.yml` (§10.3).
+  - Done (2026-11-19): the pipeline above, with the version check (`package.json`) before deploying.
+  - Open (owner): the steps in `TODO.md`, then a green production run.
+- [ ] Domain: verify `moliveda.dev`, map `buzzvel-fe.moliveda.dev` (Cloud Run domain mapping,
+      available in `us-central1`, §10.3), add the DNS records (I2), confirm HTTPS.
+  - Done (2026-11-19): `modules/domain` (`google_cloud_run_domain_mapping`, output
+    `domain_dns_records`), enabled by `domain_name` in `production.tfvars`; `min_instances = 1`.
+    `fmt` and `validate` pass.
+  - Open (owner): Search Console verification, `apply`, the CNAME at the registrar, certificate.
+- [x] Final `README.md`: install/run/build, key decisions, known gaps, approximate time spent, AI
       usage, Terraform docs, asset credits, Lighthouse screenshot.
+  - Done (2026-11-19): pipeline, releasing, rollback and Terraform sections match the new workflows;
+    Terraform variables and outputs table; Known gaps finalised (rebuild instead of promotion,
+    unsigned workflow tags, domain mapping in Preview, deferred gate items); 32 hours over 4 days;
+    Claude Code with the Figma MCP server and Context7; `docs/lighthouse-mobile.png`.
 - [ ] Production build locally (`npm run build && npm start`) and on mobile and desktop one last
       time.
+  - Done (2026-11-19): `app` and `gate` images built; the app image answers `/health`, `/` and
+    `robots.txt` (production rules); `gate` in the app's network namespace (as on Cloud Run) returns
+    401 without credentials, 200 with them, `X-Robots-Tag` set. Lighthouse on the production build:
+    92/100/100/100.
+  - Open (owner): mobile and desktop on the live URL (`TODO.md` step 10).
 - [ ] Submit the public repo URL through the Buzzvel submission form **before the cutoff (I7)**.
       Target: submitted by Thu 11-19 evening; Friday is buffer only.
 
