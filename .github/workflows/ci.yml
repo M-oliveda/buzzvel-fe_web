@@ -176,11 +176,38 @@ jobs:
           docker logs app
           exit 1
 
+  terraform:
+    name: Terraform format and validate
+    # Every run, not path-filtered, so `CI passed` always covers infra/ (MASTERPLAN §10.3).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.17"
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      # No backend and no credentials: validate checks the configuration and the locked provider.
+      - name: terraform validate (environments)
+        run: terraform init -backend=false -input=false && terraform validate
+
+      - name: terraform validate (bootstrap)
+        working-directory: infra/terraform/bootstrap
+        run: terraform init -backend=false -input=false && terraform validate
+
   ci:
     name: CI passed
     # Single, stable check name for branch protection, whatever jobs are added later.
     if: ${{ !cancelled() }}
-    needs: [quality, audit, e2e, lighthouse, docker]
+    needs: [quality, audit, e2e, lighthouse, docker, terraform]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
