@@ -177,13 +177,11 @@ jobs:
           exit 1
 
   terraform:
-    name: Terraform format and validate
-    # Every run, not path-filtered, so `CI passed` always covers infra/ (MASTERPLAN §10.3).
+    name: Terraform format
+    # Formatting only: infra/terraform is a reference that is never applied, so there is no
+    # provider download or validate step. Deploys use gcloud (MASTERPLAN §10.3, 2026-11-19).
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: infra/terraform
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
 
@@ -193,15 +191,7 @@ jobs:
           terraform_wrapper: false
 
       - name: terraform fmt
-        run: terraform fmt -check -recursive
-
-      # No backend and no credentials: validate checks the configuration and the locked provider.
-      - name: terraform validate (environments)
-        run: terraform init -backend=false -input=false && terraform validate
-
-      - name: terraform validate (bootstrap)
-        working-directory: infra/terraform/bootstrap
-        run: terraform init -backend=false -input=false && terraform validate
+        run: terraform fmt -check -recursive infra/terraform
 
   ci:
     name: CI passed
