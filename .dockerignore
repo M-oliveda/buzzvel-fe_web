@@ -1,0 +1,46 @@
+# .dockerignore patterns are not recursive: use `**/` to match at any depth.
+
+# VCS and tooling
+.git
+.gitignore
+.github
+.husky
+.vscode
+.idea
+.cursor
+.claude
+**/.DS_Store
+
+# Dependencies and build output (rebuilt inside the image)
+**/node_modules
+**/npm-debug.log*
+**/*.log
+**/.next
+**/.swc
+**/.turbo
+**/*.tsbuildinfo
+next-env.d.ts
+
+# Secrets
+.env
+.env.*
+
+# Docs and AI instructions (not needed at runtime)
+**/*.md
+docs
+
+# Tests and reports
+tests
+coverage
+playwright-report
+test-results
+.lighthouseci
+
+# Confidential design material, infrastructure and dev-only scripts
+design
+infra
+scripts
+
+# Container definitions
+docker-compose.yaml
+Dockerfile

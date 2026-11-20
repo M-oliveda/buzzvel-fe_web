@@ -1,0 +1,248 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "release/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a run on main: every commit there should leave a verdict.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  HUSKY: "0"
+  APP_ENV: local
+  NEXT_PUBLIC_SITE_URL: http://localhost:3100
+
+jobs:
+  quality:
+    name: Format, lint, typecheck, unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Prettier
+        run: npm run format:check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Unit and integration tests (80 % coverage gate)
+        run: npm run test:cov
+
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  audit:
+    name: Dependency audit (production)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # Reads package-lock.json only, so no install is needed. Dev-only advisories are known and
+      # tracked in the README ("Known gaps"); the shipped dependency tree must stay clean.
+      - run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    name: Build and end-to-end tests
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Persists Next.js' build cache between runs (see node_modules/next/dist/docs/01-app/02-guides/ci-build-caching.md).
+      - name: Cache Next.js build
+        uses: actions/cache@v6
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.ts') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Playwright's webServer runs `next build` and serves the production build. Only the Chromium
+      # projects run here; Firefox and WebKit are checked locally (MASTERPLAN §12, Phase 5).
+      - name: Playwright
+        run: npm run test:e2e -- --project=desktop --project=mobile
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  lighthouse:
+    name: Lighthouse (mobile, production build)
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Clean build on purpose (no .next/cache): a restored Turbopack cache can serve stale CSS.
+      - run: npm run build
+
+      # lighthouserc.json starts the server as production (robots.txt allows crawling, as SEO
+      # expects) and runs 3 times. Accessibility, Best Practices, SEO and CLS fail the job;
+      # Performance, LCP and TBT only warn (MASTERPLAN §11.4, owner decision).
+      - name: Lighthouse CI
+        run: npm run lighthouse
+
+      - name: Upload Lighthouse reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse
+          path: .lighthouseci/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker images build and smoke test
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build app image
+        run: docker build --target app --tag buzzvel-fe-app:ci .
+
+      - name: Build gate image
+        run: docker build --target gate --tag buzzvel-fe-gate:ci .
+
+      # The e2e job tests `next start`; this proves the real artifact (standalone, non-root) boots.
+      - name: Smoke test app container
+        run: |
+          docker run --detach --name app --publish 3000:3000 \
+            --env APP_ENV=local --env NEXT_PUBLIC_SITE_URL=http://localhost:3000 \
+            buzzvel-fe-app:ci
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error http://localhost:3000/health; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs app
+          exit 1
+
+  terraform:
+    name: Terraform format
+    # Formatting only: infra/terraform is a reference that is never applied, so there is no
+    # provider download or validate step. Deploys use gcloud (MASTERPLAN §10.3, 2026-11-19).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.17"
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra/terraform
+
+  ci:
+    name: CI passed
+    # Single, stable check name for branch protection, whatever jobs are added later.
+    if: ${{ !cancelled() }}
+    needs: [quality, audit, e2e, lighthouse, docker, terraform]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any required job did not succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            [ "${result}" = "success" ] || exit 1
+          done
+
+  # Deploys run only after `CI passed`. They are reusable workflows called from here rather than
+  # `workflow_run` triggers, which only fire for workflow files on the default branch (`main`).
+  deploy-preview:
+    name: Deploy preview
+    needs: ci
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'develop' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/deploy-preview.yml
+    secrets: inherit
+
+  deploy-env:
+    name: Deploy develop or staging
+    needs: ci
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/'))
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-env.yml
+    secrets: inherit
+
+  deploy-prod:
+    name: Deploy production
+    needs: ci
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+      id-token: write
+    uses: ./.github/workflows/deploy-prod.yml
+    secrets: inherit

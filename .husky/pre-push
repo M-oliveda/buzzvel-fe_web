@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+
+echo "🧪 Running pre-push checks..."
+
+# Run only the tests affected by commits not yet on the upstream branch.
+# Without an upstream (first push of a branch), run the whole suite.
+# `|| true` is required: Husky runs hooks with `sh -e`, and `rev-parse` exits 128
+# when the branch has no upstream. Without it the script aborts before the
+# fallback below can run the full suite.
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || true)
+
+if [ -n "$upstream" ]; then
+  echo "🔎 Running tests related to changes since $upstream..."
+  npx --no-install vitest run --changed "$upstream" --passWithNoTests
+else
+  echo "🔎 No upstream branch yet, running the full unit test suite..."
+  npm run --silent test
+fi
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo "❌ Tests failed. Please fix the failing tests before pushing."
+  exit 1
+fi
+
+echo "✅ All pre-push checks passed!"

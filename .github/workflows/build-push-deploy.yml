@@ -1,0 +1,228 @@
+name: Build, push and deploy
+
+# Reusable: builds the images for one environment, pushes them to that project's Artifact Registry
+# and deploys them to Cloud Run (MASTERPLAN §9). Called by deploy-env, deploy-preview and
+# deploy-prod, never directly. Callers pass `secrets: inherit`; the job's `environment:` supplies
+# the GCP_* variables and, for gated environments, the basic-auth secrets.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub Environment, also APP_ENV (preview, develop, staging, production).
+        type: string
+        required: true
+      service:
+        description: Cloud Run service name.
+        type: string
+        required: true
+      gated:
+        description: Deploy the NGINX basic-auth gate in front of the app.
+        type: boolean
+        required: true
+      site_url:
+        description: Canonical origin baked into the build. Empty means the service's run.app URL.
+        type: string
+        default: ""
+      min_instances:
+        description: Minimum Cloud Run instances.
+        type: number
+        default: 0
+      max_instances:
+        description: Maximum Cloud Run instances.
+        type: number
+        default: 2
+    outputs:
+      url:
+        description: The service's run.app URL.
+        value: ${{ jobs.deploy.outputs.url }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: ${{ inputs.service }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.target.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-${{ inputs.service }}
+      cancel-in-progress: false
+    outputs:
+      url: ${{ steps.target.outputs.url }}
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      SERVICE: ${{ inputs.service }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # The run.app URL is deterministic (<service>-<project number>.<region>.run.app), so it is
+      # known before the first deploy and can be baked into NEXT_PUBLIC_SITE_URL. The provider
+      # lives in the environment's own project, so its resource name carries the project number.
+      - name: Resolve image names and URLs
+        id: target
+        env:
+          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+          SITE_URL: ${{ inputs.site_url }}
+        run: |
+          project_number="${PROVIDER#projects/}"
+          project_number="${project_number%%/*}"
+          url="https://${SERVICE}-${project_number}.${REGION}.run.app"
+          registry="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}"
+          {
+            echo "url=${url}"
+            echo "site_url=${SITE_URL:-$url}"
+            echo "registry=${registry}"
+            echo "app_image=${registry}/app:${GITHUB_SHA}"
+            echo "gate_image=${registry}/gate:${GITHUB_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: app
+          push: true
+          tags: ${{ steps.target.outputs.app_image }}
+          build-args: |
+            APP_ENV=${{ inputs.environment }}
+            NEXT_PUBLIC_SITE_URL=${{ steps.target.outputs.site_url }}
+          cache-from: type=gha,scope=app-${{ inputs.environment }}
+          cache-to: type=gha,mode=max,scope=app-${{ inputs.environment }}
+
+      - name: Build and push gate image
+        if: ${{ inputs.gated }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: gate
+          push: true
+          tags: ${{ steps.target.outputs.gate_image }}
+          cache-from: type=gha,scope=gate
+          cache-to: type=gha,mode=max,scope=gate
+
+      # Container env vars go through files so the secrets never appear in a command line. jq
+      # writes JSON (valid YAML for gcloud), which escapes any character in the values.
+      - name: Deploy to Cloud Run
+        env:
+          APP_ENV: ${{ inputs.environment }}
+          SITE_URL: ${{ steps.target.outputs.site_url }}
+          APP_IMAGE: ${{ steps.target.outputs.app_image }}
+          GATE_IMAGE: ${{ steps.target.outputs.gate_image }}
+          GATED: ${{ inputs.gated }}
+          MIN_INSTANCES: ${{ inputs.min_instances }}
+          MAX_INSTANCES: ${{ inputs.max_instances }}
+          BASIC_AUTH_USERNAME: ${{ secrets.BASIC_AUTH_USERNAME }}
+          BASIC_AUTH_PASSWORD: ${{ secrets.BASIC_AUTH_PASSWORD }}
+        run: |
+          umask 077
+          app_env="${RUNNER_TEMP}/app-env.yaml"
+          jq -n --arg env "$APP_ENV" --arg url "$SITE_URL" \
+            '{APP_ENV: $env, NEXT_PUBLIC_SITE_URL: $url}' > "$app_env"
+
+          # Service-level flags must come before the first --container flag. The deploy owns the
+          # whole service: the first run creates it, later runs roll out a new revision. The
+          # registry and runtime service account come from scripts/gcp-setup.sh. Public on purpose:
+          # gated environments are guarded by the NGINX gate, production is the public site.
+          args=(
+            --project "$PROJECT_ID"
+            --region "$REGION"
+            --service-account "buzzvel-fe-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
+            --allow-unauthenticated
+            --min-instances "$MIN_INSTANCES"
+            --max-instances "$MAX_INSTANCES"
+            --labels "app=buzzvel-fe,env=${APP_ENV},managed-by=github-actions"
+            --quiet
+          )
+
+          # The app waits for /health before the instance takes traffic.
+          app_probe="httpGet.path=/health,httpGet.port=3000,periodSeconds=1,timeoutSeconds=1,failureThreshold=30"
+
+          if [ "$GATED" = "true" ]; then
+            if [ -z "$BASIC_AUTH_USERNAME" ] || [ -z "$BASIC_AUTH_PASSWORD" ]; then
+              echo "::error::BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must be set in the ${APP_ENV} environment"
+              exit 1
+            fi
+            gate_env="${RUNNER_TEMP}/gate-env.yaml"
+            jq -n --arg user "$BASIC_AUTH_USERNAME" --arg password "$BASIC_AUTH_PASSWORD" \
+              '{BASIC_AUTH_USERNAME: $user, BASIC_AUTH_PASSWORD: $password}' > "$gate_env"
+            args+=(
+              --container gate --image "$GATE_IMAGE" --port 8080 --depends-on app
+              --env-vars-file "$gate_env"
+              --container app --image "$APP_IMAGE"
+              --env-vars-file "$app_env" --startup-probe "$app_probe"
+            )
+          else
+            args+=(
+              --container app --image "$APP_IMAGE" --port 3000
+              --env-vars-file "$app_env" --startup-probe "$app_probe"
+            )
+          fi
+
+          gcloud run deploy "$SERVICE" "${args[@]}"
+          rm -f "$app_env" "${gate_env:-}"
+
+      # MASTERPLAN §9 step 4. Gated: probes are public, the page needs credentials and is never
+      # indexed. Production: the page is public.
+      - name: Smoke test
+        env:
+          URL: ${{ steps.target.outputs.url }}
+          GATED: ${{ inputs.gated }}
+          BASIC_AUTH_USERNAME: ${{ secrets.BASIC_AUTH_USERNAME }}
+          BASIC_AUTH_PASSWORD: ${{ secrets.BASIC_AUTH_PASSWORD }}
+        run: |
+          set -u
+          status() { curl --silent --output /dev/null --write-out '%{http_code}' "$@"; }
+          expect() {
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 returned $2, expected $3"
+              exit 1
+            fi
+            echo "$1: $2"
+          }
+
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 3 \
+            "${URL}/health"
+          echo
+          expect "GET /ready" "$(status "${URL}/ready")" 200
+
+          if [ "$GATED" = "true" ]; then
+            expect "GET / without credentials" "$(status "${URL}/")" 401
+            umask 077
+            header="${RUNNER_TEMP}/auth-header"
+            printf 'Authorization: Basic %s\n' \
+              "$(printf '%s:%s' "$BASIC_AUTH_USERNAME" "$BASIC_AUTH_PASSWORD" | base64 --wrap=0)" \
+              > "$header"
+            expect "GET / with credentials" "$(status --header "@${header}" "${URL}/")" 200
+            robots="$(curl --silent --head --header "@${header}" "${URL}/" | tr -d '\r' \
+              | grep -i '^x-robots-tag:' || true)"
+            rm -f "$header"
+            if [ -z "$robots" ]; then
+              echo "::error::X-Robots-Tag is missing on a gated environment"
+              exit 1
+            fi
+            echo "$robots"
+          else
+            expect "GET /" "$(status "${URL}/")" 200
+          fi

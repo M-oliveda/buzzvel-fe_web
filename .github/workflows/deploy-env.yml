@@ -1,0 +1,25 @@
+name: Deploy develop or staging
+
+# Reusable, called by ci.yml after `CI passed` on a push to `develop` (develop environment) or to
+# `release/**` (staging environment). Both run the NGINX gate (MASTERPLAN §9).
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-push-deploy.yml
+    with:
+      environment: ${{ github.ref_name == 'develop' && 'develop' || 'staging' }}
+      service: ${{ github.ref_name == 'develop' && 'buzzvel-fe-develop' || 'buzzvel-fe-staging' }}
+      gated: true
+      min_instances: 0
+      max_instances: 2
+    secrets: inherit
